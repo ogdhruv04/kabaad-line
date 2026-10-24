@@ -61,7 +61,7 @@ export default function Dashboard() {
         {[
           ['1', 'Collectors speak', 'Safai staff and kabadiwalas report full bins and log kilos by voice, in Hindi. No app literacy needed.', '/collector', 'Try the voice line →'],
           ['2', 'Students request', 'Hostel residents book scrap pickups (move-out cartons, bottles, e-waste) in English or Hindi.', '/request', 'Request a pickup →'],
-          ['3', 'Routes plan themselves', 'A Render Workflow forecasts fill, routes only the bins that need it, and voices a Hindi briefing per collector.', '', 'Press “Plan tomorrow” ↑'],
+          ['3', 'Routes plan themselves', 'A planning pipeline forecasts fill, routes only the bins that need it, and voices a Hindi briefing per collector.', '', 'Press “Plan tomorrow” ↑'],
         ].map(([n, title, body, to, cta]) => (
           <li key={n} className="flex gap-3 rounded-2xl border border-line bg-card p-3">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink font-display text-sm font-bold text-paper">{n}</span>

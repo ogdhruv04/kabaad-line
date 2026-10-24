@@ -13,7 +13,7 @@ Newest entries at the bottom of each section. Times are IST.
 | A4 UX polish | ✅ done | live pipeline steps, impact card, inline voice panel + transcript, feed flash, mobile fixes (D-6..D-8) |
 | A5 Weekday forecast | ✅ done | weekend vs weekday fill rate (D-9) |
 | B ElevenLabs voice + agent | ✅ done locally (Creator plan, native Hindi voice) | agent `agent_5401m5p630rwfdj982h4bnjvrxs7` live and connecting from the web; tool calls need the public Render URL (D-13..D-16) |
-| C GitHub + Render | 🔨 GitHub ✅ pushed (public, `ogdhruv04/kabaad-line`); Render ⏳ waiting on account | |
+| C GitHub + Render | GitHub ✅ · Render ❌ dropped (D-20) | demo runs locally + tunnel |
 | D README, demo script | 🔨 mostly done | README updated; `DEMO.md` shot list written |
 
 ## What YOU need to do in parallel
@@ -46,6 +46,7 @@ Newest entries at the bottom of each section. Times are IST.
 - **D-17 (~10:58) Agent created via API**, with tools pointed at `https://kabaad-api.onrender.com`. After deploy: `python -m voice.create_agent --base-url <real url> --update`. Default LLM is ElevenLabs' current default; I'll switch it only if Hindi tool-calling is flaky. A local cloudflared tunnel (to test tools before Render) was **blocked by the permission guard**, which is reasonable since it exposes the local API publicly, so I didn't work around it.
 - **D-18 (11:11) ElevenLabs Creator plan → one native voice everywhere.** Creator tier is active (131k credits). The native Hindi voice "Raju" now works through the TTS API, so `ELEVENLABS_VOICE_ID=zT03pEAEi0VHKciJODfn` is used for briefings too, and the agent and the briefings sound like one product. George is no longer used. A plan run with fresh audio for 3 collectors takes ~19 s locally.
 - **D-19 (11:11) Pre-deploy checks.** `npm ci && npm run build` with `VITE_API_URL` works from a clean install (Render's exact build). There's no local Postgres, so I reviewed for SQLite-only patterns (none found); this gets verified on the live deploy. A strong `TOOL_SHARED_SECRET` was generated into `.env`. The agent's tools still send the old dev secret until `--update` runs at deploy.
+- **D-20 (11:33) Render track dropped.** Render signup failed (no verification email arrived). The demo runs on your laptop; the ElevenLabs webhook tools reach it through a **cloudflared quick tunnel you start yourself**. The Render Workflow code stays in the repo (it's real and runs once configured), but every claim of a Render deploy was removed: the README (Render section marked optional / not deployed, plus tunnel instructions), DEMO.md (no Render-dashboard scene), the Dashboard copy ("A planning pipeline…"), and the engine badge, which now reads "in-process". Note in CLAUDE.md. If you retry later, "Sign in with GitHub" on Render skips email verification.
 
 ## Log
 - 10:21 Start. Repo had never been run: no venv, no node_modules, not a git repo, no `gh`/`ngrok`.
@@ -59,3 +60,4 @@ Newest entries at the bottom of each section. Times are IST.
 - ~10:58 Voice samples in scratchpad/voices (george/brian/sarah). Agent created + verified live via headless Chromium with a fake mic (greeting arrives in the transcript).
 - 11:11 Creator plan confirmed; briefings now in the native Hindi voice. Waiting on Render account.
 - 11:13 Added a 'How it works' strip to the Dashboard (1 Collectors speak → 2 Students request → 3 Routes plan themselves) for judges cold-opening the live URL.
+- 11:33 Render dropped; copy de-Render-ified. Waiting on you to start the tunnel.

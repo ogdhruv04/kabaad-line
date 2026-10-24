@@ -22,7 +22,7 @@ export function PipelineSteps({ run }: { run: RunStatus }) {
           Plan run #{run.id} · <span className={run.status === 'failed' ? 'text-alert' : run.status === 'done' ? 'text-leaf' : ''}>{run.status}</span>
         </div>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${onRender ? 'bg-ink text-paper' : 'bg-line text-ink'}`}>
-          engine: {onRender ? 'Render Workflow' : 'local fallback'}
+          engine: {onRender ? 'Render Workflow' : 'in-process'}
         </span>
       </div>
       <ol className="mt-3 flex flex-wrap items-center gap-1.5">

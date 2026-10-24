@@ -23,6 +23,7 @@ Collectors (safai staff, kabadiwalas) talk to a Hindi voice agent to report bins
 
 ## Rules
 - **Honesty (hackathon rule 7):** seeded readings/collections are simulated → keep the "Simulated" badges. Voice, pickups, routing, workflow runs and TTS are real.
+- **Render track dropped (24 Oct, ~11:20):** Render signup failed (no verification email). Demo runs locally + cloudflared tunnel for the ElevenLabs webhooks. Workflow code stays; don't claim a Render deploy anywhere.
 - Secrets only in env vars. Never block a web request on TTS or VRP.
 - Keep `main` deployable. Acknowledge third-party tools in README.
 

@@ -1,7 +1,7 @@
 # Kabaad Line · कबाड़ लाइन
 
 **Voice-first waste operations for the people who actually move campus waste.**
-Sanitation staff and kabadiwalas report full bins and log what they collected by *talking in Hindi*. Students request scrap pickups. Every night a Render Workflow forecasts bin fill, solves the collection routes, and generates a spoken Hindi briefing for each collector.
+Sanitation staff and kabadiwalas report full bins and log what they collected by *talking in Hindi*. Students request scrap pickups. A planning pipeline forecasts bin fill, solves the collection routes, and generates a spoken Hindi briefing for each collector. It runs in-process today and is written as Render Workflow tasks, ready to deploy.
 
 SOCIOTHON 2026 · IIT Roorkee · Smart & Sustainable Waste Management
 
@@ -20,7 +20,15 @@ uvicorn server.main:app --reload          # http://localhost:8000  (auto-seeds o
 cd web && npm install && cp .env.example .env && npm run dev    # http://localhost:5173
 ```
 
-Press **Plan tomorrow** on the dashboard. With no Render keys it runs the same pipeline in-process.
+Press **Plan tomorrow** on the dashboard. With no Render keys it runs the same pipeline in-process (this is how the demo runs).
+
+### Letting the voice agent reach your laptop
+ElevenLabs' servers call the `/tools/*` webhooks, so the backend needs a public URL. Without a deploy, use a quick tunnel and repoint the agent's tools at it:
+```bash
+cloudflared tunnel --no-autoupdate --url http://localhost:8000      # prints https://<random>.trycloudflare.com
+python -m voice.create_agent --base-url https://<random>.trycloudflare.com --update
+```
+The tunnel URL changes every time it restarts, so re-run the `--update` line each time.
 Reseed any time: `python -m server.seed`.
 
 ### Voice agent (ElevenLabs)
@@ -73,7 +81,7 @@ Each task reports back (`POST /internal/plan-runs/{id}/step`) as it finishes, so
 | `voice/` | Agent system prompt + tool setup guide |
 | `web/` | React dashboard, collector page, student request page |
 
-## Deploy on Render
+## Deploy on Render (optional; not deployed for the hackathon demo)
 
 1. Push to a **public** GitHub repo (the Render track requires it).
 2. Render → **New → Blueprint** → this repo. Creates `kabaad-api`, `kabaad-web`, `kabaad-db`. Fill the `sync: false` env vars.
@@ -93,7 +101,7 @@ Workflows is in beta, so check the Render dashboard/docs if a menu name differs.
 | Voice reports and collection logs via ElevenLabs agent | Bin fill-level history ("sensor_sim") |
 | Student pickup requests and overflow reports | 14 days of past collections (KPI history) |
 | Forecast, stop selection, OR-Tools routing, baseline comparison | Depot position and Azad Bhawan pin (approximate; others from OpenStreetMap) |
-| Render Workflow execution and parallel TTS briefings | Collector names and vehicle capacities |
+| Planning runs (in-process) and Hindi TTS briefings | Collector names and vehicle capacities |
 
 Every simulated number is tagged **Simulated** in the UI.
 
@@ -115,4 +123,4 @@ Every simulated number is tagged **Simulated** in the UI.
 | Coordinates | — | © OpenStreetMap contributors via the Overpass API, queried 24 Oct 2026 |
 
 ## Credits
-ElevenLabs (Agents + TTS), Render (Web Services, Postgres, Workflows), Google OR-Tools, FastAPI, SQLAlchemy, RapidFuzz, React, Vite, Tailwind CSS, Leaflet + OpenStreetMap (tiles and building positions via Overpass), Recharts, US EPA WARM.
+ElevenLabs (Agents + TTS), Render Workflows SDK (pipeline written for it; not deployed), Cloudflare quick tunnels, Google OR-Tools, FastAPI, SQLAlchemy, RapidFuzz, React, Vite, Tailwind CSS, Leaflet + OpenStreetMap (tiles and building positions via Overpass), Recharts, US EPA WARM.
