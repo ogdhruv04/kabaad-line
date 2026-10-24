@@ -31,7 +31,21 @@ export function Stat({ label, value, sub, badge }: { label: string; value: React
   )
 }
 
-const ICON: Record<string, string> = { report: '📣', collection: '♻️', pickup: '📦' }
+// Inline icons (stroke, 24px grid) so they render the same on every device, unlike emoji.
+const ICON_PATHS: Record<string, { d: string[]; color: string }> = {
+  report: { d: ['M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z', 'M15 9a3 3 0 0 1 0 6', 'M18 6a7 7 0 0 1 0 12'], color: 'text-alert' },
+  collection: { d: ['M7 19H4.8a1.8 1.8 0 0 1-1.6-2.7L7 10', 'M11 19h8.2a1.8 1.8 0 0 0 1.6-2.7L19 13', 'M14 16l-3 3 3 3', 'M8.3 13.6L7 10l-3.6 1.3', 'M9.3 5.3L11.4 2a1.8 1.8 0 0 1 3 0l3.6 6', 'M14.5 7.9l3.5.1.7-3.7'], color: 'text-leaf' },
+  pickup: { d: ['M21 8l-9-5-9 5 9 5 9-5z', 'M3 8v8l9 5 9-5V8', 'M12 13v8'], color: 'text-kraft' },
+}
+
+function FeedIcon({ type }: { type: string }) {
+  const icon = ICON_PATHS[type] ?? ICON_PATHS.report
+  return (
+    <svg viewBox="0 0 24 24" className={`mt-0.5 h-5 w-5 shrink-0 ${icon.color}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {icon.d.map((d) => <path key={d} d={d} />)}
+    </svg>
+  )
+}
 
 /** Items that weren't in the previous render flash in, so a voice report visibly "lands" on screen. */
 export function Feed({ items }: { items: FeedItem[] }) {
@@ -47,7 +61,7 @@ export function Feed({ items }: { items: FeedItem[] }) {
     <ul className="divide-y divide-line">
       {items.map((i) => (
         <li key={feedKey(i)} className={`flex gap-3 px-1 py-2.5 ${fresh.has(feedKey(i)) ? 'flash-in' : ''}`}>
-          <span className="text-lg leading-6">{ICON[i.type]}</span>
+          <FeedIcon type={i.type} />
           <div className="min-w-0 flex-1">
             <div className="text-sm"><b>{i.location}</b> · {i.text}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
