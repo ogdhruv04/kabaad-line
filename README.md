@@ -1,0 +1,91 @@
+# Kabaad Line · कबाड़ लाइन
+
+**Voice-first waste operations for the people who actually move campus waste.**
+Sanitation staff and kabadiwalas report full bins and log what they collected by *talking in Hindi*. Students request scrap pickups. Every night a Render Workflow forecasts bin fill, solves the collection routes, and generates a spoken Hindi briefing for each collector.
+
+SOCIOTHON 2026 · IIT Roorkee · Smart & Sustainable Waste Management
+
+---
+
+## Run it locally (5 min)
+
+```bash
+# backend (repo root)
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn server.main:app --reload          # http://localhost:8000  (auto-seeds on first start)
+
+# frontend (new terminal)
+cd web && npm install && cp .env.example .env && npm run dev    # http://localhost:5173
+```
+
+Press **Plan tomorrow** on the dashboard. With no Render keys it runs the same pipeline in-process.
+Reseed any time: `python -m server.seed`.
+
+Try the voice tools without ElevenLabs:
+```bash
+curl -X POST localhost:8000/tools/report_bin_status -H "X-Tool-Secret: change-me" -H "Content-Type: application/json" \
+  -d '{"location_name":"राजेंद्र भवन के पीछे वाला बिन","fill_level":"ubal raha hai"}'
+```
+
+## How it fits together
+
+```
+ Collector (voice, Hindi) ──► ElevenLabs Agent ──webhook tools──► FastAPI  /tools/*
+ Student (web form)       ──────────────────────────────────────► FastAPI  /api/pickups
+ Dashboard (React)        ◄──────────────────────────────────────  FastAPI  /api/*
+                                                                     │  POST /api/plan/run
+                                                                     ▼
+                              Render Workflow  plan_tomorrow
+                                ├─ load_state           (GET /internal/state)
+                                ├─ forecast_fill
+                                ├─ select_stops         forecast ≥75% + voice overflows + pickups
+                                ├─ solve_routes         OR-Tools capacitated VRP
+                                ├─ publish_routes       (POST /internal/plan-runs/{id}/result)
+                                └─ synthesize_briefing  × N collectors in parallel → ElevenLabs TTS
+```
+
+| Path | What |
+|---|---|
+| `server/main.py` | API, ElevenLabs tool endpoints, workflow callbacks, local fallback |
+| `server/planner.py` | Pure planning logic (forecast, stop selection, VRP, baseline, Hindi script) |
+| `server/workflows.py` | Render Workflow tasks wrapping the planner |
+| `server/matching.py` | Fuzzy Hindi/English/Devanagari location matching |
+| `server/config.py` | Materials, ₹/kg rates, CO₂ factors, planning knobs |
+| `server/seed.py` | Campus locations + 14 days of **simulated** history |
+| `voice/` | Agent system prompt + tool setup guide |
+| `web/` | React dashboard, collector page, student request page |
+
+## Deploy on Render
+
+1. Push to a **public** GitHub repo (the Render track requires it).
+2. Render → **New → Blueprint** → this repo. Creates `kabaad-api`, `kabaad-web`, `kabaad-db`. Fill the `sync: false` env vars.
+3. Render → **New → Workflow** → same repo:
+   - Build: `pip install -r requirements.txt`
+   - Start: `render-workflows server.workflows:app`
+   - Env: `BACKEND_URL=https://kabaad-api.onrender.com`, `TOOL_SHARED_SECRET`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`
+4. On `kabaad-api` set `WORKFLOW_SLUG` = the workflow service's name, and `RENDER_API_KEY` (Account settings → API keys).
+5. Dashboard → **Plan tomorrow** should now say *engine: Render Workflow*; open the run in the Render dashboard to show the task tree in the demo.
+
+Workflows is in beta, so check the Render dashboard/docs if a menu name differs. SDK facts used here (verified against `render==1.4.0`): package is `render`, every task takes `ctx` first, subtasks run via `await ctx.run(task, ...)`, trigger with `Render().workflows.start_task("<slug>/plan_tomorrow", {...})`.
+
+## What's real vs simulated (hackathon rule 7)
+
+| Real, working live | Simulated / placeholder |
+|---|---|
+| Voice reports and collection logs via ElevenLabs agent | Bin fill-level history ("sensor_sim") |
+| Student pickup requests and overflow reports | 14 days of past collections (KPI history) |
+| Forecast, stop selection, OR-Tools routing, baseline comparison | Location coordinates (approximate) |
+| Render Workflow execution and parallel TTS briefings | ₹/kg rates and CO₂e factors (replace with sourced values) |
+
+Every simulated number is tagged **Simulated** in the UI.
+
+## Impact metrics we report
+- Route km saved vs a fixed daily round visiting every bin (+ fuel and CO₂ saved).
+- Share of collected weight diverted from landfill; ₹ value recovered for collectors.
+- Multilayer-packaging (MLP) share, the non-recyclable fraction to target.
+- Voice reports per day, a proxy for how much of the informal workforce is now "on the map".
+
+## Credits
+ElevenLabs (Agents + TTS), Render (Web Services, Postgres, Workflows), Google OR-Tools, FastAPI, SQLAlchemy, RapidFuzz, React, Vite, Tailwind CSS, Leaflet + OpenStreetMap, Recharts.

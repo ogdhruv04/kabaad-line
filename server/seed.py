@@ -1,0 +1,105 @@
+"""Seed the database with campus locations, collectors and 14 days of SIMULATED history.
+
+!! Coordinates are PLACEHOLDERS scattered around the IIT Roorkee campus centre.
+!! Fix them from Google Maps (right-click a spot -> copy lat,lng) before the demo.
+
+Run:  python -m server.seed          (wipes and reseeds)
+"""
+import random
+from datetime import datetime, timedelta, timezone
+
+from .db import Base, SessionLocal, engine
+from .models import BinReading, Collection, Collector, Location, Report
+
+CENTER = (29.8649, 77.8966)
+
+# name, kind, (dlat, dlng) offset from centre in degrees, capacity_l, aliases
+LOCATIONS = [
+    ("Estate Depot (MRF)",     "depot",  (-0.0060, -0.0040), 0,    ["depot", "estate", "डिपो", "एस्टेट"]),
+    ("Rajendra Bhawan",        "hostel", ( 0.0045, -0.0062), 1100, ["rajendra", "rjb", "राजेंद्र", "राजेंद्र भवन"]),
+    ("Govind Bhawan",          "hostel", ( 0.0058, -0.0030), 1100, ["govind", "गोविंद", "गोविंद भवन"]),
+    ("Cautley Bhawan",         "hostel", ( 0.0030,  0.0055), 1100, ["cautley", "कॉटली", "कॉटली भवन"]),
+    ("Ganga Bhawan",           "hostel", ( 0.0070,  0.0010), 1100, ["ganga", "गंगा", "गंगा भवन"]),
+    ("Jawahar Bhawan",         "hostel", ( 0.0012,  0.0068), 1100, ["jawahar", "जवाहर", "जवाहर भवन"]),
+    ("Ravindra Bhawan",        "hostel", (-0.0010,  0.0072), 1100, ["ravindra", "रविंद्र", "रवींद्र भवन"]),
+    ("Azad Bhawan",            "hostel", ( 0.0082, -0.0048), 1100, ["azad", "आज़ाद", "आजाद भवन"]),
+    ("Rajiv Bhawan",           "hostel", ( 0.0090,  0.0035), 1100, ["rajiv", "राजीव", "राजीव भवन"]),
+    ("Radhakrishnan Bhawan",   "hostel", ( 0.0095, -0.0012), 1100, ["radhakrishnan", "rkb", "राधाकृष्णन"]),
+    ("Kasturba Bhawan",        "hostel", (-0.0035,  0.0048), 1100, ["kasturba", "kb", "कस्तूरबा", "कस्तूरबा भवन"]),
+    ("Sarojini Bhawan",        "hostel", (-0.0048,  0.0030), 1100, ["sarojini", "सरोजिनी", "सरोजिनी भवन"]),
+    ("Himalaya Bhawan",        "hostel", (-0.0055,  0.0062), 1100, ["himalaya", "हिमालय", "हिमालय भवन"]),
+    ("Main Building",          "dept",   ( 0.0000,  0.0000), 660,  ["main building", "mb", "मेन बिल्डिंग"]),
+    ("Lecture Hall Complex",   "dept",   (-0.0015, -0.0025), 660,  ["lhc", "lecture hall", "एलएचसी"]),
+    ("Central Library",        "dept",   ( 0.0010, -0.0018), 660,  ["library", "mgcl", "लाइब्रेरी"]),
+    ("Multi Activity Centre",  "dept",   (-0.0025, -0.0055), 660,  ["mac", "activity centre", "मैक"]),
+    ("Institute Hospital",     "dept",   (-0.0068,  0.0012), 660,  ["hospital", "अस्पताल"]),
+    ("Civil Engg Dept",        "dept",   ( 0.0022, -0.0045), 660,  ["civil", "सिविल"]),
+    ("Electrical Engg Dept",   "dept",   ( 0.0028,  0.0022), 660,  ["electrical", "ee dept", "इलेक्ट्रिकल"]),
+    ("Students Club Canteen",  "mess",   (-0.0005,  0.0040), 660,  ["canteen", "students club", "कैंटीन"]),
+    ("Sports Complex",         "dept",   (-0.0075, -0.0045), 660,  ["sports", "stadium", "स्पोर्ट्स"]),
+    ("Main Gate Market",       "dept",   (-0.0085, -0.0015), 660,  ["main gate", "market", "मेन गेट", "बाज़ार"]),
+    ("Faculty Residences A",   "bin",    ( 0.0040,  0.0090), 660,  ["faculty", "residence", "क्वार्टर"]),
+]
+
+COLLECTORS = [
+    ("Ramesh", "+910000000001", 600),
+    ("Sunita", "+910000000002", 500),
+    ("Iqbal",  "+910000000003", 550),
+]
+
+# Daily fill rate (% of capacity per day) by kind, before noise
+DAILY_RATE = {"hostel": 38, "mess": 55, "dept": 22, "bin": 18, "depot": 0}
+HOSTEL_WEEKEND_BOOST = 1.3
+MATERIAL_MIX = {"cardboard": 0.28, "pet": 0.14, "hdpe": 0.06, "metal": 0.04, "glass": 0.03, "ewaste": 0.01, "mlp": 0.16, "mixed": 0.28}
+
+
+def seed(days: int = 14, rng_seed: int = 7) -> None:
+    rng = random.Random(rng_seed)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+
+    locs = []
+    for name, kind, (dlat, dlng), cap, aliases in LOCATIONS:
+        loc = Location(name=name, kind=kind, lat=CENTER[0] + dlat, lng=CENTER[1] + dlng, capacity_l=cap, aliases=aliases)
+        db.add(loc)
+        locs.append(loc)
+    collectors = [Collector(name=n, phone=p, vehicle_capacity_kg=c) for n, p, c in COLLECTORS]
+    db.add_all(collectors)
+    db.flush()
+
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    start = now - timedelta(days=days)
+    bins = [l for l in locs if l.kind != "depot"]
+    fill = {b.id: rng.uniform(5, 40) for b in bins}
+
+    t = start
+    step = timedelta(hours=6)
+    while t <= now:
+        weekend = t.weekday() >= 5
+        for b in bins:
+            rate = DAILY_RATE[b.kind] * rng.uniform(0.7, 1.3)
+            if b.kind == "hostel" and weekend:
+                rate *= HOSTEL_WEEKEND_BOOST
+            fill[b.id] += rate / 4  # 6-hour step
+            # Fixed-schedule collection (the status quo we compare against): one morning round per day;
+            # if above 60%, otherwise it overflows.
+            if (t - start).total_seconds() % 86400 == 0 and fill[b.id] >= 60:
+                kg = b.capacity_l * min(fill[b.id], 110) / 100 * 0.12
+                for mat, share in MATERIAL_MIX.items():
+                    db.add(Collection(collector_id=rng.choice(collectors).id, location_id=b.id, material=mat,
+                                      kg=round(kg * share * rng.uniform(0.8, 1.2), 1), simulated=True, ts=t))
+                fill[b.id] = rng.uniform(0, 8)
+            if fill[b.id] > 100 and rng.random() < 0.15:
+                db.add(Report(location_id=b.id, kind="overflow", text="Bin overflowing (simulated)",
+                              reporter="sim", channel="voice", simulated=True, ts=t))
+            db.add(BinReading(location_id=b.id, fill_pct=round(min(fill[b.id], 120), 1), source="sensor_sim", ts=t))
+        t += step
+
+    db.commit()
+    db.close()
+    print(f"Seeded {len(locs)} locations, {len(collectors)} collectors, {days} days of simulated history.")
+
+
+if __name__ == "__main__":
+    seed()
