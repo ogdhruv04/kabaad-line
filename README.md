@@ -23,9 +23,17 @@ cd web && npm install && cp .env.example .env && npm run dev    # http://localho
 Press **Plan tomorrow** on the dashboard. With no Render keys it runs the same pipeline in-process.
 Reseed any time: `python -m server.seed`.
 
+### Voice agent (ElevenLabs)
+```bash
+python -m voice.create_agent --hindi-voices                       # pick a Hindi voice → ELEVENLABS_VOICE_ID in .env
+python -m voice.create_agent --base-url https://<your-api>.onrender.com   # creates the 3 webhook tools + the Hindi agent
+python -m voice.create_agent --base-url https://<new-url> --update        # repoint tools later
+```
+It prints the agent ID; put it in `web/.env` as `VITE_ELEVENLABS_AGENT_ID`. The Collector page talks to the agent inline over WebRTC using `@elevenlabs/react`: a big mic button, a live Hindi transcript, and a receipt chip each time the agent calls a tool. `collector_name` is passed as a dynamic variable and bound straight into the tool calls, so the LLM never guesses who is speaking. Manual setup is described in `voice/AGENT_SETUP.md`.
+
 Try the voice tools without ElevenLabs:
 ```bash
-curl -X POST localhost:8000/tools/report_bin_status -H "X-Tool-Secret: change-me" -H "Content-Type: application/json" \
+curl -X POST localhost:8000/tools/report_bin_status -H "X-Tool-Secret: dev-secret" -H "Content-Type: application/json" \
   -d '{"location_name":"राजेंद्र भवन के पीछे वाला बिन","fill_level":"ubal raha hai"}'
 ```
 
@@ -45,6 +53,14 @@ curl -X POST localhost:8000/tools/report_bin_status -H "X-Tool-Secret: change-me
                                 ├─ publish_routes       (POST /internal/plan-runs/{id}/result)
                                 └─ synthesize_briefing  × N collectors in parallel → ElevenLabs TTS
 ```
+
+Each task reports back (`POST /internal/plan-runs/{id}/step`) as it finishes, so the dashboard lights up the same steps you see in the Render run tree. Without Render keys, the identical pipeline runs in a thread and reports the same steps.
+
+**Planning details.**
+- *Forecast:* each bin's fill rate is learned from the last 7 days of readings. It is weekday-aware, so hostels fill faster at weekends.
+- *Stop selection:* a bin is a stop if forecast ≥75% full, voice-reported overflowing, or has a student pickup request.
+- *Routing:* OR-Tools capacitated VRP, up to 3 depot trips per collector, with a penalty on repeat trips to keep workloads fair.
+- *Briefing:* a Hindi briefing per collector, with place names in Devanagari so the voice pronounces them naturally.
 
 | Path | What |
 |---|---|
