@@ -12,11 +12,11 @@ Newest entries at the bottom of each section. Times are IST.
 | A3 Sourced ₹/kg + CO₂e | ✅ done | EPA WARM v16 + TheKabadiwala list; README Sources table (D-5) |
 | A4 UX polish | ✅ done | live pipeline steps, impact card, inline voice panel + transcript, feed flash, mobile fixes (D-6..D-8) |
 | A5 Weekday forecast | ✅ done | weekend vs weekday fill rate (D-9) |
-| B ElevenLabs voice + agent | ✅ done locally (Creator plan, native Hindi voice) | agent `agent_5401m5p630rwfdj982h4bnjvrxs7` live and connecting from the web; tool calls need the public Render URL (D-13..D-16) |
+| B ElevenLabs voice + agent | ✅ done (Creator plan, native Hindi voice) | agent `agent_5401m5p884h5ejnvw3fdz6x08cps`, tools via cloudflared tunnel, E2E verified (D-13..D-22) |
 | C GitHub + Render | GitHub ✅ · Render ❌ dropped (D-20) | demo runs locally + tunnel |
-| D README, demo script | 🔨 mostly done | README updated; `DEMO.md` shot list written |
+| D README, demo video | ✅ done | video on Google Drive (linked at top of README); README final pass |
 
-## What YOU need to do in parallel
+## What YOU needed to do (historical; Render step abandoned, see D-20)
 1. **ElevenLabs** → sign up → Developers / Profile → **API keys** → create a key with Text-to-Speech, Voices and **Agents (ConvAI)** permissions. Paste it into `/home/dhruv/kabaad-line/.env` as `ELEVENLABS_API_KEY=` yourself (safer than pasting in chat), or paste it to me. I then pick a Hindi voice, create the agent + tools via the API, and test TTS.
 2. **GitHub** → create an **empty public** repo (no README) named `kabaad-line` and send me the URL. `gh` isn't installed, so I'll add the remote; you may need to run `git push` yourself if no SSH key/credential is set up here.
 3. **Render** → sign up with GitHub. Then:
@@ -70,3 +70,4 @@ Newest entries at the bottom of each section. Times are IST.
 - 12:08 Balanced routing, route progress loop, nightly auto-plan, pickup status — all live-tested. DB reseeded (test logs wiped).
 - 12:15 WSL crashed; restored servers (data intact), cloudflared reinstalled to ~/.local/bin (/tmp was wiped), added ./run-local.sh. Tunnel URL changes → re-run create_agent --update.
 - 12:18 New tunnel variables-paintball-hotel-motor.trycloudflare.com; agent tools repointed + verified through the tunnel (Ramesh 2/4, next विज्ञान कुंज).
+- 12:51 Demo video recorded by you, link verified public, added to README with an at-a-glance summary. Submission: repo + video link.
