@@ -20,12 +20,12 @@ uvicorn server.main:app --reload          # http://localhost:8000  (auto-seeds o
 cd web && npm install && cp .env.example .env && npm run dev    # http://localhost:5173
 ```
 
-Press **Plan tomorrow** on the dashboard. With no Render keys it runs the same pipeline in-process (this is how the demo runs).
+Or start both servers at once with `./run-local.sh`. Press **Plan tomorrow** on the dashboard. With no Render keys it runs the same pipeline in-process (this is how the demo runs).
 
 ### Letting the voice agent reach your laptop
 ElevenLabs' servers call the `/tools/*` webhooks, so the backend needs a public URL. Without a deploy, use a quick tunnel and repoint the agent's tools at it:
 ```bash
-cloudflared tunnel --no-autoupdate --url http://localhost:8000      # prints https://<random>.trycloudflare.com
+~/.local/bin/cloudflared tunnel --no-autoupdate --url http://localhost:8000   # prints https://<random>.trycloudflare.com
 python -m voice.create_agent --base-url https://<random>.trycloudflare.com --update
 ```
 The tunnel URL changes every time it restarts, so re-run the `--update` line each time.
