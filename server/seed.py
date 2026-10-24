@@ -1,7 +1,8 @@
 """Seed the database with campus locations, collectors and 14 days of SIMULATED history.
 
-!! Coordinates are PLACEHOLDERS scattered around the IIT Roorkee campus centre.
-!! Fix them from Google Maps (right-click a spot -> copy lat,lng) before the demo.
+Coordinates come from OpenStreetMap (Overpass API, queried 2026-10-24; © OpenStreetMap contributors).
+Exceptions, marked "approx" below: the depot (no MRF/estate yard is mapped) and Azad Bhawan (only its
+stationery shop is mapped).
 
 Run:  python -m server.seed          (wipes and reseeds)
 """
@@ -11,34 +12,34 @@ from datetime import datetime, timedelta, timezone
 from .db import Base, SessionLocal, engine
 from .models import BinReading, Collection, Collector, Location, Report
 
-CENTER = (29.8649, 77.8966)
-
-# name, kind, (dlat, dlng) offset from centre in degrees, capacity_l, aliases
+# name, kind, (lat, lng), capacity_l, aliases
 LOCATIONS = [
-    ("Estate Depot (MRF)",     "depot",  (-0.0060, -0.0040), 0,    ["depot", "estate", "डिपो", "एस्टेट"]),
-    ("Rajendra Bhawan",        "hostel", ( 0.0045, -0.0062), 1100, ["rajendra", "rjb", "राजेंद्र", "राजेंद्र भवन"]),
-    ("Govind Bhawan",          "hostel", ( 0.0058, -0.0030), 1100, ["govind", "गोविंद", "गोविंद भवन"]),
-    ("Cautley Bhawan",         "hostel", ( 0.0030,  0.0055), 1100, ["cautley", "कॉटली", "कॉटली भवन"]),
-    ("Ganga Bhawan",           "hostel", ( 0.0070,  0.0010), 1100, ["ganga", "गंगा", "गंगा भवन"]),
-    ("Jawahar Bhawan",         "hostel", ( 0.0012,  0.0068), 1100, ["jawahar", "जवाहर", "जवाहर भवन"]),
-    ("Ravindra Bhawan",        "hostel", (-0.0010,  0.0072), 1100, ["ravindra", "रविंद्र", "रवींद्र भवन"]),
-    ("Azad Bhawan",            "hostel", ( 0.0082, -0.0048), 1100, ["azad", "आज़ाद", "आजाद भवन"]),
-    ("Rajiv Bhawan",           "hostel", ( 0.0090,  0.0035), 1100, ["rajiv", "राजीव", "राजीव भवन"]),
-    ("Radhakrishnan Bhawan",   "hostel", ( 0.0095, -0.0012), 1100, ["radhakrishnan", "rkb", "राधाकृष्णन"]),
-    ("Kasturba Bhawan",        "hostel", (-0.0035,  0.0048), 1100, ["kasturba", "kb", "कस्तूरबा", "कस्तूरबा भवन"]),
-    ("Sarojini Bhawan",        "hostel", (-0.0048,  0.0030), 1100, ["sarojini", "सरोजिनी", "सरोजिनी भवन"]),
-    ("Himalaya Bhawan",        "hostel", (-0.0055,  0.0062), 1100, ["himalaya", "हिमालय", "हिमालय भवन"]),
-    ("Main Building",          "dept",   ( 0.0000,  0.0000), 660,  ["main building", "mb", "मेन बिल्डिंग"]),
-    ("Lecture Hall Complex",   "dept",   (-0.0015, -0.0025), 660,  ["lhc", "lecture hall", "एलएचसी"]),
-    ("Central Library",        "dept",   ( 0.0010, -0.0018), 660,  ["library", "mgcl", "लाइब्रेरी"]),
-    ("Multi Activity Centre",  "dept",   (-0.0025, -0.0055), 660,  ["mac", "activity centre", "मैक"]),
-    ("Institute Hospital",     "dept",   (-0.0068,  0.0012), 660,  ["hospital", "अस्पताल"]),
-    ("Civil Engg Dept",        "dept",   ( 0.0022, -0.0045), 660,  ["civil", "सिविल"]),
-    ("Electrical Engg Dept",   "dept",   ( 0.0028,  0.0022), 660,  ["electrical", "ee dept", "इलेक्ट्रिकल"]),
-    ("Students Club Canteen",  "mess",   (-0.0005,  0.0040), 660,  ["canteen", "students club", "कैंटीन"]),
-    ("Sports Complex",         "dept",   (-0.0075, -0.0045), 660,  ["sports", "stadium", "स्पोर्ट्स"]),
-    ("Main Gate Market",       "dept",   (-0.0085, -0.0015), 660,  ["main gate", "market", "मेन गेट", "बाज़ार"]),
-    ("Faculty Residences A",   "bin",    ( 0.0040,  0.0090), 660,  ["faculty", "residence", "क्वार्टर"]),
+    ("Estate Depot (MRF)",     "depot",  (29.86500, 77.89060), 0,    ["depot", "estate", "डिपो", "एस्टेट"]),  # approx
+    ("Rajendra Bhawan",        "hostel", (29.87101, 77.89408), 1100, ["rajendra", "rjb", "राजेंद्र", "राजेंद्र भवन"]),
+    ("Govind Bhawan",          "hostel", (29.86203, 77.89447), 1100, ["govind", "गोविंद", "गोविंद भवन"]),
+    ("Cautley Bhawan",         "hostel", (29.87055, 77.89684), 1100, ["cautley", "कॉटली", "कॉटली भवन"]),
+    ("Ganga Bhawan",           "hostel", (29.87173, 77.89454), 1100, ["ganga", "गंगा", "गंगा भवन"]),
+    ("Jawahar Bhawan",         "hostel", (29.86369, 77.90095), 1100, ["jawahar", "जवाहर", "जवाहर भवन"]),
+    ("Ravindra Bhawan",        "hostel", (29.86493, 77.89282), 1100, ["ravindra", "रविंद्र", "रवींद्र भवन"]),
+    ("Azad Bhawan",            "hostel", (29.86536, 77.89219), 1100, ["azad", "आज़ाद", "आजाद भवन"]),  # approx
+    ("Rajiv Bhawan",           "hostel", (29.86978, 77.89498), 1100, ["rajiv", "राजीव", "राजीव भवन"]),
+    ("Radhakrishnan Bhawan",   "hostel", (29.87120, 77.89566), 1100, ["radhakrishnan", "rkb", "राधाकृष्णन"]),
+    ("Kasturba Bhawan",        "hostel", (29.86724, 77.90090), 1100, ["kasturba", "kb", "कस्तूरबा", "कस्तूरबा भवन"]),
+    ("Sarojini Bhawan",        "hostel", (29.86505, 77.90003), 1100, ["sarojini", "सरोजिनी", "सरोजिनी भवन"]),
+    ("Himalaya Bhawan",        "hostel", (29.86113, 77.89618), 1100, ["himalaya", "हिमालय", "हिमालय भवन"]),
+    ("Vigyan Kunj",            "hostel", (29.86215, 77.90030), 1100, ["vigyan", "vigyan kunj", "विज्ञान कुंज"]),
+    ("Cautley-Ganga Mess",     "mess",   (29.87199, 77.89520), 660,  ["mess", "cautley ganga mess", "ganga mess", "cautley mess", "मेस"]),
+    ("Main Building",          "dept",   (29.86465, 77.89657), 660,  ["main building", "mb", "james thomason", "मेन बिल्डिंग"]),
+    ("Lecture Hall Complex",   "dept",   (29.86482, 77.89390), 660,  ["lhc", "lecture hall", "एलएचसी"]),
+    ("Central Library",        "dept",   (29.86531, 77.89477), 660,  ["library", "mgcl", "लाइब्रेरी"]),
+    ("Multi Activity Centre",  "dept",   (29.87014, 77.89636), 660,  ["mac", "activity centre", "मैक"]),
+    ("Institute Hospital",     "dept",   (29.86172, 77.89292), 660,  ["hospital", "अस्पताल"]),
+    ("Civil Engg Dept",        "dept",   (29.86261, 77.89854), 660,  ["civil", "सिविल"]),
+    ("Electrical Engg Dept",   "dept",   (29.86367, 77.89732), 660,  ["electrical", "ee dept", "इलेक्ट्रिकल"]),
+    ("Students Club Canteen",  "mess",   (29.86392, 77.89463), 660,  ["canteen", "students club", "कैंटीन"]),
+    ("Sports Complex",         "dept",   (29.86776, 77.89883), 660,  ["sports", "stadium", "dhyan chand", "स्पोर्ट्स"]),
+    ("Main Gate Market",       "dept",   (29.86543, 77.88935), 660,  ["main gate", "market", "मेन गेट", "बाज़ार"]),
+    ("Saraswati Kunj",         "bin",    (29.86984, 77.89821), 660,  ["saraswati kunj", "faculty", "residence", "सरस्वती कुंज", "क्वार्टर"]),
 ]
 
 COLLECTORS = [
@@ -60,8 +61,8 @@ def seed(days: int = 14, rng_seed: int = 7) -> None:
     db = SessionLocal()
 
     locs = []
-    for name, kind, (dlat, dlng), cap, aliases in LOCATIONS:
-        loc = Location(name=name, kind=kind, lat=CENTER[0] + dlat, lng=CENTER[1] + dlng, capacity_l=cap, aliases=aliases)
+    for name, kind, (lat, lng), cap, aliases in LOCATIONS:
+        loc = Location(name=name, kind=kind, lat=lat, lng=lng, capacity_l=cap, aliases=aliases)
         db.add(loc)
         locs.append(loc)
     collectors = [Collector(name=n, phone=p, vehicle_capacity_kg=c) for n, p, c in COLLECTORS]

@@ -84,7 +84,7 @@ export default function Dashboard() {
           </div>
           <CampusMap locations={locs} routes={latest.routes} />
           {impact?.dropped?.length ? <p className="mt-2 text-sm text-alert">Over vehicle capacity, needs an extra trip: {impact.dropped.join(', ')}</p> : null}
-          <p className="mt-2 text-xs text-muted">Fill levels from the seed script are simulated; voice and student reports override them live. Map coordinates are approximate.</p>
+          <p className="mt-2 text-xs text-muted">Fill levels from the seed script are simulated; voice and student reports override them live. Map positions from OpenStreetMap; depot location approximate.</p>
         </Card>
         <Card>
           <div className="mb-2 flex items-center justify-between"><h2 className="text-lg font-bold">Live feed</h2><LiveBadge /></div>
