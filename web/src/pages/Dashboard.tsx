@@ -89,10 +89,13 @@ export default function Dashboard() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
             <h2 className="text-lg font-bold">Bins & tomorrow's routes</h2>
+            <p className="text-xs text-muted">Balanced so every collector's shift is about equal · auto-plans nightly at 21:00 IST</p>
+          </div>
             <div className="flex flex-wrap gap-3 text-xs text-muted">
               {latest.routes.map((r, i) => (
-                <span key={r.id} className="flex items-center gap-1"><span className="h-2 w-4 rounded" style={{ background: ROUTE_COLORS[i % ROUTE_COLORS.length] }} />{r.collector_name} · {r.stops.length} stops · {r.distance_km} km</span>
+                <span key={r.id} className="flex items-center gap-1"><span className="h-2 w-4 rounded" style={{ background: ROUTE_COLORS[i % ROUTE_COLORS.length] }} />{r.collector_name} · {r.stops.filter((s) => s.done).length}/{r.stops.length} done · {r.distance_km} km · ~{r.shift_min} min</span>
               ))}
             </div>
           </div>

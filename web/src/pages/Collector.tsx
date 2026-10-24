@@ -24,6 +24,7 @@ export default function Collector() {
   }, [])
 
   const route = latest.routes.find((r) => r.collector_name === who)
+  const doneCount = route?.stops.filter((s) => s.done).length ?? 0
 
   return (
     <div className="grid gap-4 lg:grid-cols-5">
@@ -52,17 +53,31 @@ export default function Collector() {
           <h2 className="text-lg font-bold">{who} का कल का रूट</h2>
           {!route ? <p className="text-sm text-muted">No route yet. Press “Plan tomorrow” on the dashboard.</p> : (
             <>
-              <p className="text-sm text-muted">{route.stops.length} stops · {route.distance_km} km · plan for {latest.run?.plan_date}</p>
+              <p className="text-sm text-muted">{route.stops.length} stops · {route.distance_km} km · ~{route.shift_min} min shift · plan for {latest.run?.plan_date}</p>
+              <div className="mt-3 flex items-center gap-3">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
+                  <div className="h-full rounded-full bg-leaf transition-all duration-700" style={{ width: `${(100 * doneCount) / route.stops.length}%` }} />
+                </div>
+                <span className="text-sm font-semibold">{doneCount}/{route.stops.length} done</span>
+              </div>
               {route.audio_url
                 ? <audio controls src={route.audio_url} className="mt-3 w-full" />
                 : <p className="mt-3 rounded-xl bg-amber/10 p-3 text-sm">Audio briefing appears here once ElevenLabs TTS is configured.</p>}
               <ol className="mt-3 grid gap-2">
-                {route.stops.map((s, i) => (
-                  <li key={`${s.location_id}-${i}`} className="flex gap-3 rounded-xl bg-paper px-3 py-2">
-                    <span className="font-display text-lg font-bold text-kraft">{i + 1}</span>
-                    <div><div className="font-semibold">{s.name}</div><div className="text-xs text-muted">{s.reasons.join(' · ')} · ~{s.est_kg} kg</div></div>
-                  </li>
-                ))}
+                {route.stops.map((s, i) => {
+                  const isNext = !s.done && route.stops.findIndex((x) => !x.done) === i
+                  return (
+                    <li key={`${s.location_id}-${i}`}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-2 transition ${s.done ? 'bg-leaf-soft/60 opacity-70' : isNext ? 'bg-paper ring-2 ring-leaf' : 'bg-paper'}`}>
+                      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-sm font-bold ${s.done ? 'bg-leaf text-white' : 'text-kraft'}`}>{s.done ? '✓' : i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-semibold ${s.done ? 'line-through decoration-leaf/60' : ''}`}>{s.name} <span className="font-normal text-muted">· {s.name_hi}</span></div>
+                        <div className="text-xs text-muted">{s.done ? `collected${s.done_by ? ` by ${s.done_by}` : ''}` : `${s.reasons.join(' · ')} · ~${s.est_kg} kg`}{(s.trip ?? 1) > 1 && ` · trip ${s.trip}`}</div>
+                      </div>
+                      {isNext && <span className="rounded-full bg-leaf px-2 py-0.5 text-[11px] font-semibold text-white">अगला</span>}
+                    </li>
+                  )
+                })}
               </ol>
               <details className="mt-3 text-sm"><summary className="cursor-pointer text-muted">Briefing script</summary><p className="mt-2">{route.briefing_text}</p></details>
             </>

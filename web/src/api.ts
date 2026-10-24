@@ -16,9 +16,12 @@ export type Loc = {
   id: number; name: string; kind: string; lat: number; lng: number; capacity_l: number
   fill_pct: number | null; fill_source: string | null; fill_ts: string | null
 }
-export type Stop = { location_id: number; name: string; lat: number; lng: number; est_kg: number; reasons: string[] }
+export type Stop = {
+  location_id: number; name: string; name_hi?: string; lat: number; lng: number; est_kg: number; reasons: string[]
+  trip?: number; done?: boolean; done_by?: string; done_at?: string
+}
 export type Route = {
-  id: number; collector_id: number; collector_name: string; stops: Stop[]; distance_km: number
+  id: number; collector_id: number; collector_name: string; stops: Stop[]; distance_km: number; shift_min: number
   briefing_text: string; audio_url: string | null
 }
 export type Impact = { baseline_km: number; optimized_km: number; km_saved: number; pct_saved: number; fuel_l_saved: number; co2_kg_saved: number; stops: number; dropped: string[] }
@@ -30,6 +33,7 @@ export type Kpis = {
 }
 export type FeedItem = { type: 'report' | 'collection' | 'pickup'; kind: string; text: string; location: string; who: string; channel: string; simulated: boolean; ts: string }
 export type Collector = { id: number; name: string; vehicle_capacity_kg: number }
+export type Pickup = { id: number; location: string; material: string; est_kg: number; status: 'pending' | 'scheduled' | 'collected'; ts: string }
 export type RunStatus = {
   id: number; status: string; engine: string; workflow_run_id: string
   steps: string[]; all_steps: string[]; summary: { error?: string; impact?: Impact }

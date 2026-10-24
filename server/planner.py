@@ -119,13 +119,16 @@ def baseline_km(state: dict) -> float:
 
 
 def solve_routes(state: dict, stops: list[dict], time_limit_s: int = 3) -> dict:
-    """Capacitated VRP with OR-Tools: each collector may do up to TRIPS_PER_COLLECTOR depot round trips."""
+    """Multi-trip capacitated VRP with OR-Tools, balanced so no collector's shift is much longer than another's."""
     solved = _vrp(state, stops, time_limit_s)
     solved["baseline_km"] = baseline_km(state)
     return solved
 
 
 def _vrp(state: dict, stops: list[dict], time_limit_s: int) -> dict:
+    """One vehicle per collector. Optional "reload" nodes at the depot let a vehicle unload and go again
+    (OR-Tools' reload pattern: negative demand + capacity slack). A Time dimension (drive + load + unload)
+    with a global span cost keeps shifts even across collectors."""
     from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
     collectors = state["collectors"]
@@ -133,30 +136,45 @@ def _vrp(state: dict, stops: list[dict], time_limit_s: int) -> dict:
     if not stops:
         return {"routes": [], "optimized_km": 0.0, "dropped": []}
 
-    # One OR-Tools vehicle per (collector, trip): unloading at the depot between trips resets capacity.
-    trips = [c for _ in range(config.TRIPS_PER_COLLECTOR) for c in collectors]
-    nodes = [(depot["lat"], depot["lng"])] + [(s["lat"], s["lng"]) for s in stops]
-    dist = [[int(road_km(a, b) * 1000) for b in nodes] for a in nodes]
-    demands = [0] + [max(1, int(round(s["est_kg"]))) for s in stops]
-    caps = [int(c["vehicle_capacity_kg"]) for c in trips]
+    n_veh = len(collectors)
+    caps = [int(c["vehicle_capacity_kg"]) for c in collectors]
+    max_cap = max(caps)
+    n_reload = n_veh * (config.TRIPS_PER_COLLECTOR - 1)
+    depot_ll = (depot["lat"], depot["lng"])
+    # node 0 = depot, 1..n_reload = depot copies for unloading, then the stops
+    coords = [depot_ll] * (1 + n_reload) + [(s["lat"], s["lng"]) for s in stops]
+    first_stop = 1 + n_reload
+    dist = [[int(road_km(a, b) * 1000) for b in coords] for a in coords]
+    demands = [0] + [-max_cap] * n_reload + [max(1, int(round(s["est_kg"]))) for s in stops]
 
-    manager = pywrapcp.RoutingIndexManager(len(nodes), len(trips), 0)
+    def service_min(node: int) -> float:
+        if node == 0:
+            return 0
+        if node < first_stop:
+            return config.UNLOAD_MIN
+        return config.STOP_MIN + demands[node] / 100 * config.LOAD_MIN_PER_100KG
+
+    travel_min = [[d / 1000 / config.CART_KMPH * 60 for d in row] for row in dist]
+    time_m = [[int(round(service_min(i) + travel_min[i][j])) for j in range(len(coords))] for i in range(len(coords))]
+
+    manager = pywrapcp.RoutingIndexManager(len(coords), n_veh, 0)
     routing = pywrapcp.RoutingModel(manager)
 
-    def dist_cb(i, j):
-        return dist[manager.IndexToNode(i)][manager.IndexToNode(j)]
+    dist_idx = routing.RegisterTransitCallback(lambda i, j: dist[manager.IndexToNode(i)][manager.IndexToNode(j)])
+    routing.SetArcCostEvaluatorOfAllVehicles(dist_idx)
 
-    transit = routing.RegisterTransitCallback(dist_cb)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit)
-    for v in range(len(collectors), len(trips)):  # repeat trips cost extra, so work spreads across collectors first
-        routing.SetFixedCostOfVehicle(5000, v)
+    demand_idx = routing.RegisterUnaryTransitCallback(lambda i: demands[manager.IndexToNode(i)])
+    routing.AddDimensionWithVehicleCapacity(demand_idx, max_cap, caps, True, "Capacity")  # slack absorbs unloading
+    capacity = routing.GetDimensionOrDie("Capacity")
 
-    def demand_cb(i):
-        return demands[manager.IndexToNode(i)]
+    time_idx = routing.RegisterTransitCallback(lambda i, j: time_m[manager.IndexToNode(i)][manager.IndexToNode(j)])
+    routing.AddDimension(time_idx, 0, 24 * 60, True, "Time")
+    routing.GetDimensionOrDie("Time").SetGlobalSpanCostCoefficient(config.BALANCE_M_PER_MIN)
 
-    demand_idx = routing.RegisterUnaryTransitCallback(demand_cb)
-    routing.AddDimensionWithVehicleCapacity(demand_idx, 0, caps, True, "Capacity")
-    for node in range(1, len(nodes)):  # allow dropping a stop only if capacity makes it impossible
+    for node in range(1, first_stop):  # unloading trips are free to skip
+        routing.AddDisjunction([manager.NodeToIndex(node)], 0)
+    for node in range(first_stop, len(coords)):  # drop a stop only if capacity makes it impossible
+        capacity.SlackVar(manager.NodeToIndex(node)).SetValue(0)
         routing.AddDisjunction([manager.NodeToIndex(node)], 10_000_000)
 
     params = pywrapcp.DefaultRoutingSearchParameters()
@@ -165,29 +183,27 @@ def _vrp(state: dict, stops: list[dict], time_limit_s: int) -> dict:
     params.time_limit.seconds = time_limit_s
     solution = routing.SolveWithParameters(params)
 
-    by_collector: dict[int, dict] = {}
-    visited = set()
+    routes, visited = [], set()
     if solution:
-        for v, c in enumerate(trips):
+        for v, c in enumerate(collectors):
             idx = routing.Start(v)
-            ordered, meters = [], 0
+            ordered, meters, minutes, trip, prev = [], 0, 0, 1, 0
             while not routing.IsEnd(idx):
-                node = manager.IndexToNode(idx)
-                if node != 0:
-                    ordered.append(stops[node - 1])
-                    visited.add(node)
                 nxt = solution.Value(routing.NextVar(idx))
-                meters += dist[node][manager.IndexToNode(nxt)]
+                node, nnode = manager.IndexToNode(idx), manager.IndexToNode(nxt)
+                if node >= first_stop:
+                    ordered.append({**stops[node - first_stop], "trip": trip})
+                    visited.add(node)
+                elif node != 0 and ordered and ordered[-1]["trip"] == trip:  # unloaded after some stops
+                    trip += 1
+                meters += dist[node][nnode]
+                minutes += time_m[node][nnode]
                 idx = nxt
             if ordered:
-                r = by_collector.setdefault(c["id"], {"collector_id": c["id"], "collector_name": c["name"], "stops": [],
-                                                      "trips": 0, "distance_km": 0.0, "load_kg": 0.0})
-                r["trips"] += 1
-                r["stops"] += [{**s, "trip": r["trips"]} for s in ordered]
-                r["distance_km"] = round(r["distance_km"] + meters / 1000, 2)
-                r["load_kg"] = round(r["load_kg"] + sum(s["est_kg"] for s in ordered), 1)
-    routes = list(by_collector.values())
-    dropped = [stops[n - 1]["name"] for n in range(1, len(nodes)) if n not in visited]
+                routes.append({"collector_id": c["id"], "collector_name": c["name"], "stops": ordered,
+                               "trips": ordered[-1]["trip"], "distance_km": round(meters / 1000, 2),
+                               "shift_min": minutes, "load_kg": round(sum(s["est_kg"] for s in ordered), 1)})
+    dropped = [stops[n - first_stop]["name"] for n in range(first_stop, len(coords)) if n not in visited]
     optimized = round(sum(r["distance_km"] for r in routes), 2)
     return {"routes": routes, "optimized_km": optimized, "dropped": dropped}
 
@@ -199,6 +215,8 @@ def briefing_text(route: dict, plan_date: str) -> str:
     names = [s.get("name_hi") or s["name"] for s in stops]  # Devanagari so the Hindi voice pronounces them naturally
     lines = [f"नमस्ते {route['collector_name']} जी। कल के लिए आपका रूट तैयार है।",
              f"कुल {len(stops)} स्टॉप हैं, लगभग {route['distance_km']:.1f} किलोमीटर, और करीब {route['load_kg']:.0f} किलो कचरा।"]
+    if route.get("shift_min"):
+        lines.append(f"अंदाज़न {route['shift_min']} मिनट का काम है।")
     if route.get("trips", 1) > 1:
         lines.append(f"गाड़ी भरने पर डिपो खाली करके आइए, कुल {route['trips']} चक्कर लगेंगे।")
     if names:

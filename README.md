@@ -64,10 +64,19 @@ curl -X POST localhost:8000/tools/report_bin_status -H "X-Tool-Secret: dev-secre
 
 Each task reports back (`POST /internal/plan-runs/{id}/step`) as it finishes, so the dashboard lights up the same steps you see in the Render run tree. Without Render keys, the identical pipeline runs in a thread and reports the same steps.
 
+**Who controls what.**
+| Role | Can do | What it changes |
+|---|---|---|
+| Collector (voice, Hindi) | "X ka dibba bhar gaya" | Sets the bin's fill level. Overflows force the bin into the next plan. |
+| | "X se 12 kilo gatta uthaya" | Logs a collection (₹ value, today's total), marks the bin emptied, **ticks that stop off their route**, closes any student pickup there, and the agent **announces the next stop** |
+| | "Ab kahan jaana hai?" | Reads the **remaining** stops |
+| Student (web, EN/HI) | Pickup request or overflow report | Becomes a guaranteed stop in the next plan. The status goes requested → on tomorrow's route → collected ✓ |
+| Supervisor (dashboard) | "Plan tomorrow", move-out mode | Re-plans everyone's routes. The same plan also runs **automatically at 21:00 IST** (`AUTO_PLAN_AT_IST`) |
+
 **Planning details.**
 - *Forecast:* each bin's fill rate is learned from the last 7 days of readings. It is weekday-aware, so hostels fill faster at weekends.
 - *Stop selection:* a bin is a stop if forecast ≥75% full, voice-reported overflowing, or has a student pickup request.
-- *Routing:* OR-Tools capacitated VRP, up to 3 depot trips per collector, with a penalty on repeat trips to keep workloads fair.
+- *Routing:* OR-Tools capacitated VRP, one vehicle per collector, with optional unload-at-depot nodes (the reload pattern) for up to 3 trips. A shift-time dimension counts driving at 12 km/h, 4 min per stop plus 6 min per 100 kg loaded, and 12 min to unload. A global span cost keeps the longest shift short, so **work is split evenly**: on the seed data, shifts come out at 60/60/53 min instead of 72/58/26, for +1.2 km in total. Move-out mode gives 2 trips each and shifts within 5 min of each other.
 - *Briefing:* a Hindi briefing per collector, with place names in Devanagari so the voice pronounces them naturally.
 
 | Path | What |

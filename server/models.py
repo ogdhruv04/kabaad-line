@@ -70,7 +70,7 @@ class PickupRequest(Base):
     est_kg: Mapped[float] = mapped_column(Float, default=5)
     contact: Mapped[str] = mapped_column(String(120), default="")
     note: Mapped[str] = mapped_column(Text, default="")
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | scheduled | done
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | scheduled | collected
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -92,8 +92,9 @@ class Route(Base):
     plan_run_id: Mapped[int] = mapped_column(ForeignKey("plan_runs.id"), index=True)
     plan_date: Mapped[str] = mapped_column(String(10), index=True)
     collector_id: Mapped[int] = mapped_column(ForeignKey("collectors.id"))
-    stops: Mapped[list] = mapped_column(JSON, default=list)  # [{location_id, name, lat, lng, est_kg, reason}]
+    stops: Mapped[list] = mapped_column(JSON, default=list)  # [{location_id, name, name_hi, lat, lng, est_kg, reasons, trip, done?}]
     distance_km: Mapped[float] = mapped_column(Float, default=0)
+    shift_min: Mapped[int] = mapped_column(Integer, default=0)  # drive + load + unload estimate, balanced across collectors
     briefing_text: Mapped[str] = mapped_column(Text, default="")
     audio_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

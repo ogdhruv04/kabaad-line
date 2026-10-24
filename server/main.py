@@ -12,7 +12,8 @@ import base64
 import hashlib
 import re
 import threading
-from datetime import date, datetime, timedelta, timezone
+import time
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,7 @@ from .matching import match_location
 from .models import AudioClip, BinReading, Collection, Collector, Location, PickupRequest, PlanRun, Report, Route
 
 app = FastAPI(title="Kabaad Line")
+IST = timezone(timedelta(hours=5, minutes=30))
 app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -36,6 +38,22 @@ def startup() -> None:
         if db.scalar(select(func.count(Location.id))) == 0:
             from .seed import seed
             seed()
+    if config.AUTO_PLAN_AT_IST:
+        threading.Thread(target=nightly_planner, daemon=True).start()
+
+
+def nightly_planner() -> None:
+    """Plan tomorrow automatically every evening (same pipeline as the button); collectors get briefings overnight."""
+    hh, mm = map(int, config.AUTO_PLAN_AT_IST.split(":"))
+    while True:
+        now = datetime.now(IST)
+        at = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        time.sleep(((at if at > now else at + timedelta(days=1)) - now).total_seconds())
+        try:
+            with SessionLocal() as db:
+                start_plan(db, None, move_out=False)
+        except Exception as e:  # never kill the scheduler
+            print("nightly plan failed:", e)
 
 
 def require_secret(x_tool_secret: str = Header(default="")) -> None:
@@ -60,7 +78,7 @@ def latest_fill(db: Session) -> dict[int, BinReading]:
 # ======================================================================= public API
 @app.get("/api/health")
 def health():
-    return {"ok": True, "workflow_configured": bool(config.RENDER_API_KEY and config.WORKFLOW_SLUG),
+    return {"ok": True, "workflow_configured": bool(config.RENDER_API_KEY and config.WORKFLOW_SLUG), "auto_plan_at_ist": config.AUTO_PLAN_AT_IST,
             "tts_configured": bool(config.ELEVENLABS_API_KEY and config.ELEVENLABS_VOICE_ID)}
 
 
@@ -160,6 +178,14 @@ def create_pickup(body: PickupIn, db: Session = Depends(get_db)):
     return {"id": p.id, "status": p.status}
 
 
+@app.get("/api/pickups")
+def list_pickups(limit: int = 8, db: Session = Depends(get_db)):
+    names = {l.id: l.name for l in db.scalars(select(Location))}
+    return [{"id": p.id, "location": names.get(p.location_id, "?"), "material": p.material, "est_kg": p.est_kg,
+             "status": p.status, "ts": aware(p.ts).isoformat()}
+            for p in db.scalars(select(PickupRequest).order_by(PickupRequest.id.desc()).limit(limit))]
+
+
 class WebReportIn(BaseModel):
     location_id: int
     kind: str = "overflow"
@@ -218,7 +244,7 @@ def store_result(db: Session, run: PlanRun, solved: dict) -> list[dict]:
         text = r.get("briefing_text", "")
         cached = db.scalars(select(AudioClip.id).where(AudioClip.text_hash == text_hash(text))).first()
         route = Route(plan_run_id=run.id, plan_date=run.plan_date, collector_id=r["collector_id"], stops=r["stops"],
-                      distance_km=r["distance_km"], briefing_text=text, audio_id=cached)
+                      distance_km=r["distance_km"], shift_min=r.get("shift_min", 0), briefing_text=text, audio_id=cached)
         db.add(route)
         db.flush()
         created.append({"route_id": route.id, "briefing_text": text, "collector_name": r["collector_name"], "has_audio": bool(cached)})
@@ -279,7 +305,11 @@ class PlanIn(BaseModel):
 
 @app.post("/api/plan/run")
 def plan_run(body: PlanIn, db: Session = Depends(get_db)):
-    plan_date = body.plan_date or (date.today() + timedelta(days=1)).isoformat()
+    return start_plan(db, body.plan_date, body.move_out)
+
+
+def start_plan(db: Session, plan_date: str | None, move_out: bool) -> dict:
+    plan_date = plan_date or (datetime.now(IST).date() + timedelta(days=1)).isoformat()
     use_workflow = bool(config.RENDER_API_KEY and config.WORKFLOW_SLUG)
     run = PlanRun(plan_date=plan_date, engine="render_workflow" if use_workflow else "local")
     db.add(run)
@@ -287,11 +317,11 @@ def plan_run(body: PlanIn, db: Session = Depends(get_db)):
     if use_workflow:
         from render import Render
         task_run = Render().workflows.start_task(f"{config.WORKFLOW_SLUG}/plan_tomorrow",
-                                                 {"plan_run_id": run.id, "plan_date": plan_date, "move_out": body.move_out})
+                                                 {"plan_run_id": run.id, "plan_date": plan_date, "move_out": move_out})
         run.workflow_run_id = task_run.id
         db.commit()
     else:
-        threading.Thread(target=run_locally, args=(run.id, body.move_out), daemon=True).start()
+        threading.Thread(target=run_locally, args=(run.id, move_out), daemon=True).start()
     return {"plan_run_id": run.id, "engine": run.engine, "workflow_run_id": run.workflow_run_id}
 
 
@@ -325,7 +355,7 @@ def latest_routes(db: Session = Depends(get_db)):
         "run": {"id": run.id, "plan_date": run.plan_date, "engine": run.engine, "workflow_run_id": run.workflow_run_id,
                 "impact": (run.summary or {}).get("impact")},
         "routes": [{"id": r.id, "collector_id": r.collector_id, "collector_name": cnames.get(r.collector_id),
-                    "stops": r.stops, "distance_km": r.distance_km, "briefing_text": r.briefing_text,
+                    "stops": r.stops, "distance_km": r.distance_km, "shift_min": r.shift_min, "briefing_text": r.briefing_text,
                     "audio_url": f"{config.PUBLIC_BACKEND_URL}/api/audio/{r.audio_id}" if r.audio_id else None} for r in routes],
     }
 
@@ -457,6 +487,34 @@ class CollectionIn(BaseModel):
     collector_id: int | None = None
 
 
+def current_routes(db: Session) -> list[Route]:
+    run = db.scalars(select(PlanRun).where(PlanRun.status == "done").order_by(PlanRun.id.desc())).first()
+    return db.scalars(select(Route).where(Route.plan_run_id == run.id)).all() if run else []
+
+
+def complete_stop(db: Session, collector: Collector | None, loc: Location) -> Route | None:
+    """A collection at a planned stop ticks it off the route and closes any student pickup there."""
+    routes = current_routes(db)
+    mine = [r for r in routes if collector and r.collector_id == collector.id]
+    route = next((r for r in mine + routes if any(s["location_id"] == loc.id for s in r.stops)), None)
+    if route:
+        route.stops = [{**s, "done": True, "done_at": utcnow().isoformat(), "done_by": collector.name if collector else ""}
+                       if s["location_id"] == loc.id and not s.get("done") else s for s in route.stops]
+    for p in db.scalars(select(PickupRequest).where(PickupRequest.location_id == loc.id,
+                                                     PickupRequest.status.in_(["pending", "scheduled"]))):
+        p.status = "collected"
+    return route
+
+
+def route_progress(route: Route | None) -> dict:
+    if not route:
+        return {}
+    remaining = [s for s in route.stops if not s.get("done")]
+    nxt = remaining[0] if remaining else None
+    return {"stops_done": len(route.stops) - len(remaining), "stops_total": len(route.stops),
+            "next_stop": nxt["name"] if nxt else None, "next_stop_hi": (nxt.get("name_hi") or nxt["name"]) if nxt else None}
+
+
 @app.post("/tools/log_collection", dependencies=[Depends(require_secret)])
 def tool_log_collection(body: CollectionIn, db: Session = Depends(get_db)):
     collector = find_collector(db, body.collector_id, body.collector_name)
@@ -466,8 +524,12 @@ def tool_log_collection(body: CollectionIn, db: Session = Depends(get_db)):
     mat = config.normalize_material(body.material)
     db.add(Collection(collector_id=collector.id if collector else None, location_id=loc.id if loc else None,
                       material=mat, kg=body.kg))
+    route = None
     if loc:
         db.add(BinReading(location_id=loc.id, fill_pct=5, source="collected"))
+        route = complete_stop(db, collector, loc)
+    if collector:  # progress is always about the caller's own route, even if they helped at someone else's stop
+        route = next((r for r in current_routes(db) if r.collector_id == collector.id), None)
     db.commit()
     start_of_day = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     q = select(func.sum(Collection.kg)).where(Collection.simulated.is_(False), Collection.ts >= start_of_day)
@@ -475,9 +537,14 @@ def tool_log_collection(body: CollectionIn, db: Session = Depends(get_db)):
         q = q.where(Collection.collector_id == collector.id)
     today = db.scalar(q) or 0
     value = body.kg * config.MATERIALS[mat]["rate_inr_per_kg"]
+    prog = route_progress(route)
+    msg = f"Logged {body.kg:g} kg {config.MATERIALS[mat]['label']}, worth about ₹{value:.0f}. Today's total {today:.0f} kg."
+    if prog:
+        msg += (f" Route: {prog['stops_done']} of {prog['stops_total']} stops done. Next stop: {prog['next_stop_hi']}."
+                if prog["next_stop"] else f" All {prog['stops_total']} stops on the route are done.")
     return {"status": "logged", "material": config.MATERIALS[mat]["label"], "material_hi": config.MATERIALS[mat]["label_hi"],
             "kg": body.kg, "location": loc.name if loc else None, "today_total_kg": round(today, 1), "value_inr": round(value),
-            "message": f"Logged {body.kg:g} kg {config.MATERIALS[mat]['label']}, worth about ₹{value:.0f}. Today's total {today:.0f} kg."}
+            **prog, "message": msg}
 
 
 class RouteQueryIn(BaseModel):
@@ -491,10 +558,12 @@ def tool_get_route(body: RouteQueryIn, db: Session = Depends(get_db)):
     if not collector:
         names = [c.name for c in db.scalars(select(Collector))]
         return {"status": "need_clarification", "message": f"Ask the caller their name. Known collectors: {', '.join(names)}"}
-    run = db.scalars(select(PlanRun).where(PlanRun.status == "done").order_by(PlanRun.id.desc())).first()
-    route = run and db.scalars(select(Route).where(Route.plan_run_id == run.id, Route.collector_id == collector.id)).first()
+    route = next((r for r in current_routes(db) if r.collector_id == collector.id), None)
     if not route:
         return {"status": "no_route", "message": f"No route planned for {collector.name} yet."}
+    remaining = [s for s in route.stops if not s.get("done")]
     return {"status": "ok", "collector": collector.name, "plan_date": route.plan_date, "distance_km": route.distance_km,
-            "stops": [{"order": i + 1, "name": s["name"], "why": ", ".join(s["reasons"]), "est_kg": s["est_kg"]}
-                      for i, s in enumerate(route.stops)]}
+            **route_progress(route),
+            "remaining_stops": [{"order": i + 1, "name": s.get("name_hi") or s["name"], "why": ", ".join(s["reasons"]),
+                                 "est_kg": s["est_kg"], "trip": s.get("trip", 1)} for i, s in enumerate(remaining)],
+            "message": "All stops done." if not remaining else f"{len(remaining)} stops left; read them in order."}

@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { get, post, type Loc } from '../api'
+import { get, post, timeAgo, type Loc, type Pickup } from '../api'
 import { Card } from '../components/ui'
 
 const T = {
-  en: { title: 'Got scrap? We’ll pick it up.', sub: 'Cartons, bottles, old electronics — especially during move-out. It goes to a collector’s route tomorrow.', where: 'Where', what: 'What', kg: 'Roughly how many kg?', contact: 'Room / phone (optional)', note: 'Anything else', send: 'Request pickup', done: 'Done! It will be on tomorrow’s route.', report: 'Or report an overflowing bin here', reportBtn: 'Report overflow' },
-  hi: { title: 'कबाड़ है? हम उठा लेंगे।', sub: 'गत्ते, बोतलें, पुराने इलेक्ट्रॉनिक्स — ख़ासकर हॉस्टल खाली करते समय। यह कल के रूट में जुड़ जाएगा।', where: 'कहाँ', what: 'क्या', kg: 'लगभग कितने किलो?', contact: 'कमरा / फ़ोन (वैकल्पिक)', note: 'और कुछ', send: 'पिकअप बुलाएँ', done: 'हो गया! यह कल के रूट में है।', report: 'या यहाँ भरे हुए डस्टबिन की शिकायत करें', reportBtn: 'शिकायत करें' },
+  en: { title: 'Got scrap? We’ll pick it up.', sub: 'Cartons, bottles, old electronics — especially during move-out. It goes to a collector’s route tomorrow.', where: 'Where', what: 'What', kg: 'Roughly how many kg?', contact: 'Room / phone (optional)', note: 'Anything else', send: 'Request pickup', done: 'Done! It will be on tomorrow’s route.', report: 'Or report an overflowing bin here', reportBtn: 'Report overflow', recent: 'Recent requests', status: { pending: 'requested', scheduled: 'on tomorrow’s route', collected: 'collected ✓' } },
+  hi: { title: 'कबाड़ है? हम उठा लेंगे।', sub: 'गत्ते, बोतलें, पुराने इलेक्ट्रॉनिक्स — ख़ासकर हॉस्टल खाली करते समय। यह कल के रूट में जुड़ जाएगा।', where: 'कहाँ', what: 'क्या', kg: 'लगभग कितने किलो?', contact: 'कमरा / फ़ोन (वैकल्पिक)', note: 'और कुछ', send: 'पिकअप बुलाएँ', done: 'हो गया! यह कल के रूट में है।', report: 'या यहाँ भरे हुए डस्टबिन की शिकायत करें', reportBtn: 'शिकायत करें', recent: 'हाल के अनुरोध', status: { pending: 'अनुरोध मिला', scheduled: 'कल के रूट में', collected: 'उठा लिया ✓' } },
 }
 const MATS = [['cardboard', 'Cardboard / paper · गत्ता'], ['pet', 'PET bottles · बोतल'], ['metal', 'Metal / cans · लोहा'], ['ewaste', 'E-waste · ई-कचरा'], ['hdpe', 'Hard plastic · प्लास्टिक'], ['glass', 'Glass · काँच']]
 
@@ -13,11 +13,17 @@ export default function Request() {
   const [locs, setLocs] = useState<Loc[]>([])
   const [form, setForm] = useState({ location_id: 0, material: 'cardboard', est_kg: 5, contact: '', note: '' })
   const [msg, setMsg] = useState('')
+  const [pickups, setPickups] = useState<Pickup[]>([])
   const t = T[lang]
 
   useEffect(() => { get<Loc[]>('/api/locations').then((l) => { const ok = l.filter((x) => x.kind !== 'depot'); setLocs(ok); setForm((f) => ({ ...f, location_id: ok[0]?.id ?? 0 })) }) }, [])
 
-  const submit = async (e: FormEvent) => { e.preventDefault(); await post('/api/pickups', form); setMsg(t.done) }
+  useEffect(() => {
+    const load = () => get<Pickup[]>('/api/pickups?limit=6').then(setPickups)
+    load(); const id = setInterval(load, 5000); return () => clearInterval(id)
+  }, [])
+
+  const submit = async (e: FormEvent) => { e.preventDefault(); await post('/api/pickups', form); setMsg(t.done); setPickups(await get<Pickup[]>('/api/pickups?limit=6')) }
   const report = async () => { await post('/api/reports', { location_id: form.location_id, kind: 'overflow', text: form.note }); setMsg(t.done) }
 
   const field = 'mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2.5'
@@ -54,6 +60,20 @@ export default function Request() {
           {msg && <p className="rounded-xl bg-leaf-soft p-3 text-sm text-leaf">{msg}</p>}
         </form>
       </Card>
+      {pickups.length > 0 && (
+        <Card className="mt-4">
+          <h2 className="font-bold">{t.recent}</h2>
+          <ul className="mt-2 divide-y divide-line">
+            {pickups.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span><b>{p.location}</b> · ~{p.est_kg} kg {p.material} <span className="text-muted">· {timeAgo(p.ts)}</span></span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+                  p.status === 'collected' ? 'bg-leaf-soft text-leaf' : p.status === 'scheduled' ? 'bg-amber/15 text-amber' : 'bg-line text-muted'}`}>{t.status[p.status]}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   )
 }

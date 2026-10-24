@@ -25,10 +25,17 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 PUBLIC_BACKEND_URL = os.getenv("PUBLIC_BACKEND_URL", BACKEND_URL)
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+AUTO_PLAN_AT_IST = os.getenv("AUTO_PLAN_AT_IST", "21:00")  # nightly "Plan tomorrow"; set empty to disable
 
 # --- Planning knobs ---------------------------------------------------------
 FILL_THRESHOLD = 75          # % predicted fill at which a bin gets a stop tomorrow
 TRIPS_PER_COLLECTOR = 3     # depot round trips a collector can make in one shift
+# Shift-time model used to balance work across collectors (assumptions, see README)
+CART_KMPH = 12               # loaded e-cart / tipper on campus roads
+STOP_MIN = 4                 # park, walk to the bin, back
+LOAD_MIN_PER_100KG = 6       # manual loading
+UNLOAD_MIN = 12              # tip + sort at the depot between trips
+BALANCE_M_PER_MIN = 150      # objective: 1 min of longest shift costs as much as 150 m of driving (sweep: spread 46→5 min for +1.2 km)
 ROAD_FACTOR = 1.35           # straight-line -> road distance multiplier
 KG_PER_LITRE = 0.12          # loose mixed campus dry waste in a bin, ~120 kg/m³ (assumption, see README)
 MOVE_OUT_MULTIPLIER = 2.5    # semester-end move-out spike
