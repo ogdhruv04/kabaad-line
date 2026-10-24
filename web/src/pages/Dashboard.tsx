@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { get, post, ROUTE_COLORS, type FeedItem, type Kpis, type Latest, type Loc, type RunStatus } from '../api'
 import CampusMap from '../components/CampusMap'
@@ -55,6 +56,23 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      <ol className="grid gap-2 text-sm sm:grid-cols-3">
+        {[
+          ['1', 'Collectors speak', 'Safai staff and kabadiwalas report full bins and log kilos by voice, in Hindi. No app literacy needed.', '/collector', 'Try the voice line →'],
+          ['2', 'Students request', 'Hostel residents book scrap pickups (move-out cartons, bottles, e-waste) in English or Hindi.', '/request', 'Request a pickup →'],
+          ['3', 'Routes plan themselves', 'A Render Workflow forecasts fill, routes only the bins that need it, and voices a Hindi briefing per collector.', '', 'Press “Plan tomorrow” ↑'],
+        ].map(([n, title, body, to, cta]) => (
+          <li key={n} className="flex gap-3 rounded-2xl border border-line bg-card p-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink font-display text-sm font-bold text-paper">{n}</span>
+            <div>
+              <div className="font-semibold">{title}</div>
+              <p className="text-muted">{body}</p>
+              {to ? <Link to={to} className="mt-1 inline-block font-semibold text-leaf hover:underline">{cta}</Link> : <span className="mt-1 inline-block font-semibold text-leaf">{cta}</span>}
+            </div>
+          </li>
+        ))}
+      </ol>
 
       {run && <PipelineSteps run={run} />}
 

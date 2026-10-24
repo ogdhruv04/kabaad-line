@@ -58,3 +58,4 @@ Newest entries at the bottom of each section. Times are IST.
 - ~10:52 GitHub repo created by you; pushed. ElevenLabs key added.
 - ~10:58 Voice samples in scratchpad/voices (george/brian/sarah). Agent created + verified live via headless Chromium with a fake mic (greeting arrives in the transcript).
 - 11:11 Creator plan confirmed; briefings now in the native Hindi voice. Waiting on Render account.
+- 11:13 Added a 'How it works' strip to the Dashboard (1 Collectors speak → 2 Students request → 3 Routes plan themselves) for judges cold-opening the live URL.
