@@ -5,6 +5,14 @@ Sanitation staff and kabadiwalas report full bins and log what they collected by
 
 SOCIOTHON 2026 · IIT Roorkee · Smart & Sustainable Waste Management
 
+### ▶ [Watch the demo video](https://drive.google.com/file/d/1Za_-Vdfquom2p_Kz_Diy3M2gC3gRELX5/view?usp=sharing)
+
+## At a glance
+- **Who it's for:** safai staff and kabadiwalas, the informal workforce that actually moves campus waste and mostly doesn't use apps. They use it **by voice, in Hindi or Hinglish**: report a full bin, log "12 kilo gatta", ask "ab kahan jaana hai?". Students request scrap pickups on the web; supervisors watch a live dashboard.
+- **What the voice does:** an ElevenLabs agent with a native Hindi voice calls our webhook tools. Every log updates the map, ticks the stop off that collector's route, closes any student pickup there, and the agent replies with the ₹ value of what they collected and their **next stop**.
+- **How routes are planned:** a weekday-aware fill forecast picks only the bins that need a visit. OR-Tools then solves a multi-trip capacitated VRP **balanced so every collector gets a similar shift**, and each collector gets a spoken Hindi briefing. It runs on demand and automatically every night at 21:00 IST.
+- **Impact, measured honestly:** tomorrow's plan on the seeded campus is **~30% fewer route-km** than the fixed every-bin round (same crew, same trucks, same solver). Shifts are 60/60/53 min, where the unbalanced plan gave 72/58/26. ₹ and CO₂e come from a published kabadi rate list and US EPA WARM factors. Simulated history is labelled **Simulated** everywhere.
+
 ---
 
 ## Run it locally (5 min)
@@ -34,7 +42,7 @@ Reseed any time: `python -m server.seed`.
 ### Voice agent (ElevenLabs)
 ```bash
 python -m voice.create_agent --hindi-voices                       # pick a Hindi voice → ELEVENLABS_VOICE_ID in .env
-python -m voice.create_agent --base-url https://<your-api>.onrender.com   # creates the 3 webhook tools + the Hindi agent
+python -m voice.create_agent --base-url https://<public-backend-url>       # creates the 3 webhook tools + the Hindi agent
 python -m voice.create_agent --base-url https://<new-url> --update        # repoint tools later
 ```
 It prints the agent ID; put it in `web/.env` as `VITE_ELEVENLABS_AGENT_ID`. The Collector page talks to the agent inline over WebRTC using `@elevenlabs/react`: a big mic button, a live Hindi transcript, and a receipt chip each time the agent calls a tool. `collector_name` is passed as a dynamic variable and bound straight into the tool calls, so the LLM never guesses who is speaking. Manual setup is described in `voice/AGENT_SETUP.md`.
@@ -53,16 +61,16 @@ curl -X POST localhost:8000/tools/report_bin_status -H "X-Tool-Secret: dev-secre
  Dashboard (React)        ◄──────────────────────────────────────  FastAPI  /api/*
                                                                      │  POST /api/plan/run
                                                                      ▼
-                              Render Workflow  plan_tomorrow
+                     plan_tomorrow  (in-process thread; Render Workflow tasks when deployed)
                                 ├─ load_state           (GET /internal/state)
                                 ├─ forecast_fill
                                 ├─ select_stops         forecast ≥75% + voice overflows + pickups
-                                ├─ solve_routes         OR-Tools capacitated VRP
+                                ├─ solve_routes         OR-Tools multi-trip CVRP, balanced shifts
                                 ├─ publish_routes       (POST /internal/plan-runs/{id}/result)
                                 └─ synthesize_briefing  × N collectors in parallel → ElevenLabs TTS
 ```
 
-Each task reports back (`POST /internal/plan-runs/{id}/step`) as it finishes, so the dashboard lights up the same steps you see in the Render run tree. Without Render keys, the identical pipeline runs in a thread and reports the same steps.
+Each step reports back as it finishes, so the dashboard lights up the pipeline live. In the demo the pipeline runs in a background thread. `server/workflows.py` has the same steps as durable Render Workflow tasks (with retries, and TTS fanned out in parallel per collector) for when it's deployed; they report through `POST /internal/plan-runs/{id}/step`.
 
 **Who controls what.**
 | Role | Can do | What it changes |
@@ -87,8 +95,10 @@ Each task reports back (`POST /internal/plan-runs/{id}/step`) as it finishes, so
 | `server/matching.py` | Fuzzy Hindi/English/Devanagari location matching |
 | `server/config.py` | Materials, ₹/kg rates, CO₂ factors, planning knobs |
 | `server/seed.py` | Campus locations + 14 days of **simulated** history |
-| `voice/` | Agent system prompt + tool setup guide |
-| `web/` | React dashboard, collector page, student request page |
+| `voice/` | Agent system prompt, `create_agent.py` (creates/updates the agent + tools via API), manual setup guide |
+| `web/` | React dashboard, collector page (inline voice agent), student request page |
+| `run-local.sh` | Starts the API and web app together |
+| `DEMO.md` · `PROGRESS.md` | Demo script · build log with every decision and why |
 
 ## Deploy on Render (optional; not deployed for the hackathon demo)
 
@@ -110,12 +120,14 @@ Workflows is in beta, so check the Render dashboard/docs if a menu name differs.
 | Voice reports and collection logs via ElevenLabs agent | Bin fill-level history ("sensor_sim") |
 | Student pickup requests and overflow reports | 14 days of past collections (KPI history) |
 | Forecast, stop selection, OR-Tools routing, baseline comparison | Depot position and Azad Bhawan pin (approximate; others from OpenStreetMap) |
-| Planning runs (in-process) and Hindi TTS briefings | Collector names and vehicle capacities |
+| Planning runs (in-process, plus nightly auto-plan) and Hindi TTS briefings | Collector names and vehicle capacities |
+| Route progress, next-stop guidance and pickup status from voice logs | Shift-time model parameters (see assumptions) |
 
 Every simulated number is tagged **Simulated** in the UI.
 
 ## Impact metrics we report
-- Route km saved vs a fixed daily round visiting every bin (+ fuel and CO₂ saved). The comparison is like for like: same collectors, same vehicle capacities, same 3-trip limit, same forecast loads, same OR-Tools solver. The only difference is that the status-quo round empties every bin, while Kabaad Line visits only bins forecast ≥75% full, voice-reported overflows and student pickups. Repeat trips carry a solver penalty, so work is spread across collectors.
+- Route km saved vs a fixed daily round visiting every bin (+ fuel and CO₂ saved). The comparison is like for like: same collectors, same vehicle capacities, same 3-trip limit, same forecast loads, same OR-Tools solver. The only difference is that the status-quo round empties every bin, while Kabaad Line visits only bins forecast ≥75% full, voice-reported overflows and student pickups. Both sides use the same shift-balanced model.
+- Workload fairness: estimated shift minutes per collector, and the gap between the longest and shortest shift.
 - Share of collected weight diverted from landfill; ₹ value recovered for collectors.
 - Multilayer-packaging (MLP) share, the non-recyclable fraction to target.
 - Voice reports per day, a proxy for how much of the informal workforce is now "on the map".
@@ -129,6 +141,7 @@ Every simulated number is tagged **Simulated** in the UI.
 | Vehicle fuel use | 0.08 L/km | Assumption: small diesel tipper, ~12.5 km/L in stop-start duty |
 | Bin bulk density | 0.12 kg/L | Assumption for loose, mostly dry campus waste |
 | Road distance | 1.35 × straight line | Assumption (campus road grid) |
+| Shift time | 12 km/h, 4 min per stop + 6 min per 100 kg, 12 min to unload | Assumptions for a small cart/tipper; used only to balance work |
 | Coordinates | — | © OpenStreetMap contributors via the Overpass API, queried 24 Oct 2026 |
 
 ## Credits
