@@ -37,7 +37,7 @@ Newest entries at the bottom of each section. Times are IST.
 - **D-8 (~10:39) Briefings in Devanagari.** TTS now reads "राजेंद्र भवन", not "Rajendra Bhawan". The name comes from the longest Devanagari alias (`hindi_name()`), and fuller aliases were added where missing.
 - **D-9 (~10:42) Weekday-aware forecast.** Rises are bucketed by weekend/weekday and the matching rate is used when there's ≥24 h of such data. Tomorrow (25 Oct) is a Sunday: Rajendra Bhawan's rate is 46.7%/day (weekend) vs 35.9% (weekday). Forecasts ≥100% show as "forecast: overflowing" rather than "170%".
 - **D-10 (~10:43) UI fixes from headless screenshots** (Playwright, desktop + 375px): the display font had no Devanagari glyphs, so Hind was added to its stack; the material chart is now horizontal (labels overlapped on mobile); stat cards go 1-column under 420px; responsive map height. Emoji show as boxes in headless Chromium only, which is fine on real devices.
-- **D-11 (~10:50) Agent created by script, not by hand.** `voice/create_agent.py` uses the current ElevenLabs API (`POST /v1/convai/tools` webhook tools → `POST /v1/convai/agents/create` with `tool_ids`). Language `hi`, TTS model `eleven_flash_v2_5` (multilingual, low latency). `collector_name` is bound via `dynamic_variable`, so the LLM never fills it. `--update` repoints the tools after deploy. The tool secret is sent as a plain header value. The agent is public (no signed URL), which is fine for a demo; anyone with the ID could start calls on our credits.
+- **D-11 (~10:46) Agent created by script, not by hand.** `voice/create_agent.py` uses the current ElevenLabs API (`POST /v1/convai/tools` webhook tools → `POST /v1/convai/agents/create` with `tool_ids`). Language `hi`, TTS model `eleven_flash_v2_5` (multilingual, low latency). `collector_name` is bound via `dynamic_variable`, so the LLM never fills it. `--update` repoints the tools after deploy. The tool secret is sent as a plain header value. The agent is public (no signed URL), which is fine for a demo; anyone with the ID could start calls on our credits.
 - **D-12** Checked the Render SDK: `start_task(slug, input)` accepts a dict of named params, so the backend call is correct as written.
 
 ## Log
@@ -47,4 +47,4 @@ Newest entries at the bottom of each section. Times are IST.
 - 10:33 OSM coordinates in, DB reseeded, routing re-checked: 10.2 → 7.9 km (22.9% saved), all 3 collectors get work.
 - 10:37 Sourced numbers + README Sources table.
 - 10:44 A4/A5 done and screenshotted at desktop + mobile.
-- 10:52 Agent-creation script, README voice/planning sections, DEMO.md. **Blocked on keys/accounts from here.**
+- 10:47 Agent-creation script, README voice/planning sections, DEMO.md. **Blocked on keys/accounts from here.**
