@@ -12,8 +12,8 @@ Newest entries at the bottom of each section. Times are IST.
 | A3 Sourced ₹/kg + CO₂e | ✅ done | EPA WARM v16 + TheKabadiwala list; README Sources table (D-5) |
 | A4 UX polish | ✅ done | live pipeline steps, impact card, inline voice panel + transcript, feed flash, mobile fixes (D-6..D-8) |
 | A5 Weekday forecast | ✅ done | weekend vs weekday fill rate (D-9) |
-| B ElevenLabs voice + agent | 🔑 script ready, waiting on API key | `python -m voice.create_agent` (D-11) |
-| C GitHub + Render | 🔑 waiting on accounts | |
+| B ElevenLabs voice + agent | ✅ mostly done | agent `agent_5401m5p630rwfdj982h4bnjvrxs7` live and connecting from the web; tool calls need the public Render URL (D-13..D-16) |
+| C GitHub + Render | 🔨 GitHub ✅ pushed (public, `ogdhruv04/kabaad-line`); Render ⏳ waiting on account | |
 | D README, demo script | 🔨 mostly done | README updated; `DEMO.md` shot list written |
 
 ## What YOU need to do in parallel
@@ -39,6 +39,11 @@ Newest entries at the bottom of each section. Times are IST.
 - **D-10 (~10:43) UI fixes from headless screenshots** (Playwright, desktop + 375px): the display font had no Devanagari glyphs, so Hind was added to its stack; the material chart is now horizontal (labels overlapped on mobile); stat cards go 1-column under 420px; responsive map height. Emoji show as boxes in headless Chromium only, which is fine on real devices.
 - **D-11 (~10:46) Agent created by script, not by hand.** `voice/create_agent.py` uses the current ElevenLabs API (`POST /v1/convai/tools` webhook tools → `POST /v1/convai/agents/create` with `tool_ids`). Language `hi`, TTS model `eleven_flash_v2_5` (multilingual, low latency). `collector_name` is bound via `dynamic_variable`, so the LLM never fills it. `--update` repoints the tools after deploy. The tool secret is sent as a plain header value. The agent is public (no signed URL), which is fine for a demo; anyone with the ID could start calls on our credits.
 - **D-12** Checked the Render SDK: `start_task(slug, input)` accepts a dict of named params, so the backend call is correct as written.
+- **D-13 (~11:05) Repo stays public.** The Render track requires a public repo. Before pushing I verified `.env` is ignored and no keys are tracked.
+- **D-14 (~11:10) Voices: free-tier limit.** ElevenLabs free tier returns `402 paid_plan_required` for Voice Library voices **via the TTS API**. The **agent** can use them, though: it connected live with the native Hindi voice "Raju – Clear, Natural and Warm" (`zT03pEAEi0VHKciJODfn`). So right now the agent speaks native Hindi, but the briefing audio uses premade **George** (`JBFqnCBsd6RMkjVDRZzb`, multilingual v2, accented Hindi). **Your call:** ElevenLabs Starter (~$5/mo) unlocks Raju for briefings too, plus 30k credits. The free tier has 10k credits and 899 are used.
+- **D-15 (~11:12) TTS can't break planning.** A TTS failure used to mark the whole plan run *failed*. Now routes are always published and the error goes in `summary.tts_error`. In the Workflow, 4xx TTS errors return "no audio" without retrying, and 5xx still retry.
+- **D-16 (~11:12) TTS cache.** `AudioClip.text_hash` (voice + model + text). An identical briefing reuses the stored clip, and the Workflow skips TTS tasks for those routes. Repeat demo runs cost 0 credits (verified: 2nd run 6 s, no new credits).
+- **D-17 (~11:15) Agent created via API**, with tools pointed at `https://kabaad-api.onrender.com`. After deploy: `python -m voice.create_agent --base-url <real url> --update`. Default LLM is ElevenLabs' current default; I'll switch it only if Hindi tool-calling is flaky. A local cloudflared tunnel (to test tools before Render) was **blocked by the permission guard**, which is reasonable since it exposes the local API publicly, so I didn't work around it.
 
 ## Log
 - 10:21 Start. Repo had never been run: no venv, no node_modules, not a git repo, no `gh`/`ngrok`.
@@ -47,4 +52,6 @@ Newest entries at the bottom of each section. Times are IST.
 - 10:33 OSM coordinates in, DB reseeded, routing re-checked: 10.2 → 7.9 km (22.9% saved), all 3 collectors get work.
 - 10:37 Sourced numbers + README Sources table.
 - 10:44 A4/A5 done and screenshotted at desktop + mobile.
-- 10:47 Agent-creation script, README voice/planning sections, DEMO.md. **Blocked on keys/accounts from here.**
+- 10:47 Agent-creation script, README voice/planning sections, DEMO.md.
+- ~11:05 GitHub repo created by you; pushed. ElevenLabs key added.
+- ~11:15 Voice samples in scratchpad/voices (george/brian/sarah). Agent created + verified live via headless Chromium with a fake mic (greeting arrives in the transcript).

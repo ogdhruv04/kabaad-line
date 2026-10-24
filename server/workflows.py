@@ -69,7 +69,12 @@ def publish_routes(ctx: TaskContext, plan_run_id: int, solved: dict) -> list:
 
 @app.task(retry=Retry(max_retries=5, wait_duration_ms=3000, backoff_scaling=2.0))
 def synthesize_briefing(ctx: TaskContext, route_id: int, text: str) -> dict:
-    mp3 = tts.synthesize(text)
+    try:
+        mp3 = tts.synthesize(text)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code < 500:  # plan/quota/voice errors won't fix themselves: skip audio, keep the run
+            return {"route_id": route_id, "audio": False, "reason": e.response.text[:300]}
+        raise  # 5xx: let the task's Retry policy handle it
     if not mp3:
         return {"route_id": route_id, "audio": False, "reason": "ElevenLabs not configured"}
     _backend("POST", f"/internal/routes/{route_id}/audio", json={"mp3_b64": base64.b64encode(mp3).decode()})
@@ -97,7 +102,8 @@ async def plan_tomorrow(ctx: TaskContext, plan_run_id: int, plan_date: str, move
         routes = await ctx.run(publish_routes, plan_run_id, solved)
         step("publish_routes")
         # Fan out: one TTS task per collector, in parallel, each with its own retries.
-        audio = await asyncio.gather(*[ctx.run(synthesize_briefing, r["route_id"], r["briefing_text"]) for r in routes])
+        audio = await asyncio.gather(*[ctx.run(synthesize_briefing, r["route_id"], r["briefing_text"])
+                                       for r in routes if not r.get("has_audio")])  # cached clips skip TTS
         step("synthesize_briefing")
         _backend("POST", f"/internal/plan-runs/{plan_run_id}/status", json={"status": "done"})
         return {"plan_run_id": plan_run_id, "impact": planner.impact_summary(solved), "audio": audio}

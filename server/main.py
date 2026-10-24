@@ -9,6 +9,7 @@ Run locally:  uvicorn server.main:app --reload
 from __future__ import annotations
 
 import base64
+import hashlib
 import re
 import threading
 from datetime import date, datetime, timedelta, timezone
@@ -206,14 +207,21 @@ def build_state(db: Session, plan_date: str, move_out: bool) -> dict:
     }
 
 
+def text_hash(text: str) -> str:
+    return hashlib.sha256(f"{config.ELEVENLABS_VOICE_ID}|{config.ELEVENLABS_TTS_MODEL}|{text}".encode()).hexdigest()
+
+
 def store_result(db: Session, run: PlanRun, solved: dict) -> list[dict]:
+    """Save routes. A briefing identical to one already voiced reuses that clip (has_audio=True → skip TTS)."""
     created = []
     for r in solved["routes"]:
+        text = r.get("briefing_text", "")
+        cached = db.scalars(select(AudioClip.id).where(AudioClip.text_hash == text_hash(text))).first()
         route = Route(plan_run_id=run.id, plan_date=run.plan_date, collector_id=r["collector_id"], stops=r["stops"],
-                      distance_km=r["distance_km"], briefing_text=r.get("briefing_text", ""))
+                      distance_km=r["distance_km"], briefing_text=text, audio_id=cached)
         db.add(route)
         db.flush()
-        created.append({"route_id": route.id, "briefing_text": route.briefing_text, "collector_name": r["collector_name"]})
+        created.append({"route_id": route.id, "briefing_text": text, "collector_name": r["collector_name"], "has_audio": bool(cached)})
     for p in db.scalars(select(PickupRequest).where(PickupRequest.status == "pending")):
         p.status = "scheduled"
     run.summary = {"impact": planner.impact_summary(solved), "forecast": solved.get("forecast", {})}
@@ -222,10 +230,10 @@ def store_result(db: Session, run: PlanRun, solved: dict) -> list[dict]:
 
 
 def store_audio(db: Session, route_id: int, mp3: bytes) -> int:
-    clip = AudioClip(data=mp3)
+    route = db.get(Route, route_id)
+    clip = AudioClip(data=mp3, text_hash=text_hash(route.briefing_text))
     db.add(clip)
     db.flush()
-    route = db.get(Route, route_id)
     route.audio_id = clip.id
     db.commit()
     return clip.id
@@ -247,7 +255,13 @@ def run_locally(run_id: int, move_out: bool) -> None:
             created = store_result(db, run, solved)
             mark_step(db, run, "publish_routes")
             for c in created:
-                mp3 = tts.synthesize(c["briefing_text"])
+                if c["has_audio"]:
+                    continue
+                try:  # audio is a bonus: a TTS failure must not lose the routes
+                    mp3 = tts.synthesize(c["briefing_text"])
+                except Exception as e:
+                    run.summary = {**run.summary, "tts_error": str(e)[:300]}
+                    continue
                 if mp3:
                     store_audio(db, c["route_id"], mp3)
             mark_step(db, run, "synthesize_briefing")

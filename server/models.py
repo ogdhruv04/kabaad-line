@@ -102,5 +102,6 @@ class AudioClip(Base):
     __tablename__ = "audio_clips"
     id: Mapped[int] = mapped_column(primary_key=True)
     mime: Mapped[str] = mapped_column(String(40), default="audio/mpeg")
+    text_hash: Mapped[str] = mapped_column(String(64), default="", index=True)  # same briefing → reuse clip, save TTS credits
     data: Mapped[bytes] = mapped_column(LargeBinary)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

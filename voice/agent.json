@@ -1,0 +1,9 @@
+{
+  "agent_id": "agent_5401m5p630rwfdj982h4bnjvrxs7",
+  "tool_ids": {
+    "report_bin_status": "tool_8801m5p62zvdffabxjrf5n0ytefd",
+    "log_collection": "tool_1501m5p6305pekwv8kzts2ah4vwy",
+    "get_my_route": "tool_4101m5p630fff5b9z84t5mgf16vc"
+  },
+  "base_url": "https://kabaad-api.onrender.com"
+}
