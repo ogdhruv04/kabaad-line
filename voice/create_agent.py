@@ -113,8 +113,9 @@ def create_or_update(base_url: str, update: bool) -> None:
             tool_ids[name] = _ok(h.post("/v1/convai/tools", json=body))["id"]
             print(f"created tool {name}: {tool_ids[name]}")
         body = agent_body(list(tool_ids.values()))
-        if update and state.get("agent_id"):
-            _ok(h.patch(f"/v1/convai/agents/{state['agent_id']}", json=body))
+        r = h.patch(f"/v1/convai/agents/{state['agent_id']}", json=body) if update and state.get("agent_id") else None
+        if r is not None and r.status_code != 404:  # 404: agent lives in another workspace/key → create a fresh one
+            _ok(r)
             agent_id = state["agent_id"]
             print(f"updated agent {agent_id}")
         else:

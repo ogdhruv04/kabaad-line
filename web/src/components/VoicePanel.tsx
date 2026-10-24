@@ -25,6 +25,7 @@ function WaveBars({ active }: { active: boolean }) {
 function Voice({ collectorName }: { collectorName: string }) {
   const [lines, setLines] = useState<Line[]>([])
   const [err, setErr] = useState('')
+  const [typed, setTyped] = useState('')
   const upsert = (line: Line) => setLines((ls) => [...ls.filter((l) => l.id !== line.id), line].slice(-12))
   const conv = useConversation({
     onMessage: (m) => upsert({ id: `${m.role}-${m.response_id ?? m.event_id}`, role: m.role, text: m.message }),
@@ -68,6 +69,20 @@ function Voice({ collectorName }: { collectorName: string }) {
           <div className="mt-2 flex justify-center sm:justify-start"><WaveBars active={live && conv.isSpeaking} /></div>
         </div>
       </div>
+
+      {live && (
+        <form className="flex gap-2" onSubmit={(e) => {
+          e.preventDefault()
+          if (!typed.trim()) return
+          conv.sendUserMessage(typed.trim())
+          upsert({ id: `typed-${Date.now()}`, role: 'user', text: typed.trim() })
+          setTyped('')
+        }}>
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="No mic? Type here instead…" aria-label="Type a message to the agent"
+            className="min-w-0 flex-1 rounded-full border border-line bg-card px-4 py-2 text-sm" />
+          <button className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper">Send</button>
+        </form>
+      )}
 
       {err && <p className="rounded-xl bg-alert/10 p-3 text-sm text-alert">{err}</p>}
 

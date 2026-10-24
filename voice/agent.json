@@ -1,9 +1,9 @@
 {
-  "agent_id": "agent_5401m5p630rwfdj982h4bnjvrxs7",
+  "agent_id": "agent_5401m5p884h5ejnvw3fdz6x08cps",
   "tool_ids": {
-    "report_bin_status": "tool_8801m5p62zvdffabxjrf5n0ytefd",
-    "log_collection": "tool_1501m5p6305pekwv8kzts2ah4vwy",
-    "get_my_route": "tool_4101m5p630fff5b9z84t5mgf16vc"
+    "report_bin_status": "tool_2001m5p87c7gf6easvkx8zd1am9c",
+    "log_collection": "tool_6601m5p87cvgfydr32ajy2e341y4",
+    "get_my_route": "tool_5901m5p87deye7cbkmp2q35nnxa8"
   },
-  "base_url": "https://kabaad-api.onrender.com"
+  "base_url": "https://whilst-wet-belief-greensboro.trycloudflare.com"
 }
