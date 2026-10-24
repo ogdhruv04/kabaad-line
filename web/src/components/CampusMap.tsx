@@ -1,12 +1,12 @@
 import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip } from 'react-leaflet'
 import { fillColor, ROUTE_COLORS, type Loc, type Route } from '../api'
 
-export default function CampusMap({ locations, routes, height = 460 }: { locations: Loc[]; routes: Route[]; height?: number }) {
+export default function CampusMap({ locations, routes }: { locations: Loc[]; routes: Route[] }) {
   const depot = locations.find((l) => l.kind === 'depot')
-  if (!locations.length) return <div style={{ height }} className="rounded-2xl bg-line/50" />
+  if (!locations.length) return <div className="h-[340px] rounded-2xl bg-line/50 sm:h-[460px]" />
   const bounds = locations.map((l) => [l.lat, l.lng] as [number, number])
   return (
-    <MapContainer bounds={bounds} boundsOptions={{ padding: [24, 24] }} style={{ height }} scrollWheelZoom={false}>
+    <MapContainer bounds={bounds} boundsOptions={{ padding: [24, 24] }} className="h-[340px] sm:h-[460px]" scrollWheelZoom={false}>
       <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {routes.map((r, i) => depot && (
         <Polyline key={r.id} positions={[[depot.lat, depot.lng], ...r.stops.map((s) => [s.lat, s.lng] as [number, number]), [depot.lat, depot.lng]]}

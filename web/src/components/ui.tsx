@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { timeAgo, type FeedItem } from '../api'
+import { useState, type ReactNode } from 'react'
+import { feedKey, timeAgo, type FeedItem } from '../api'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <section className={`rounded-2xl border border-line bg-card p-4 shadow-[0_1px_0_#e3dac8] ${className}`}>{children}</section>
@@ -33,12 +33,20 @@ export function Stat({ label, value, sub, badge }: { label: string; value: React
 
 const ICON: Record<string, string> = { report: '📣', collection: '♻️', pickup: '📦' }
 
+/** Items that weren't in the previous render flash in, so a voice report visibly "lands" on screen. */
 export function Feed({ items }: { items: FeedItem[] }) {
+  const [prevItems, setPrevItems] = useState(items)
+  const [fresh, setFresh] = useState<Set<string>>(new Set())
+  if (items !== prevItems) {  // derive "new since last poll" during render (no effect, no ref)
+    const old = new Set(prevItems.map(feedKey))
+    setFresh(prevItems.length ? new Set(items.map(feedKey).filter((k) => !old.has(k))) : new Set())
+    setPrevItems(items)
+  }
   if (!items.length) return <p className="text-sm text-muted">Nothing yet — talk to the agent on the Collector tab.</p>
   return (
     <ul className="divide-y divide-line">
-      {items.map((i, n) => (
-        <li key={n} className="flex gap-3 py-2.5">
+      {items.map((i) => (
+        <li key={feedKey(i)} className={`flex gap-3 px-1 py-2.5 ${fresh.has(feedKey(i)) ? 'flash-in' : ''}`}>
           <span className="text-lg leading-6">{ICON[i.type]}</span>
           <div className="min-w-0 flex-1">
             <div className="text-sm"><b>{i.location}</b> · {i.text}</div>

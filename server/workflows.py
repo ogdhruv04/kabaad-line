@@ -78,15 +78,27 @@ def synthesize_briefing(ctx: TaskContext, route_id: int, text: str) -> dict:
 
 @app.task(timeout_seconds=900)
 async def plan_tomorrow(ctx: TaskContext, plan_run_id: int, plan_date: str, move_out: bool = False) -> dict:
+    def step(name: str) -> None:  # progress for the dashboard; never fail the run over it
+        try:
+            _backend("POST", f"/internal/plan-runs/{plan_run_id}/step", json={"step": name})
+        except httpx.HTTPError:
+            pass
+
     try:
         state = await ctx.run(load_state, plan_date, move_out)
+        step("load_state")
         forecast = await ctx.run(forecast_fill, state)
+        step("forecast_fill")
         stops = await ctx.run(select_stops, state, forecast)
+        step("select_stops")
         solved = await ctx.run(solve_routes, state, stops)
+        step("solve_routes")
         solved["forecast"] = forecast
         routes = await ctx.run(publish_routes, plan_run_id, solved)
+        step("publish_routes")
         # Fan out: one TTS task per collector, in parallel, each with its own retries.
         audio = await asyncio.gather(*[ctx.run(synthesize_briefing, r["route_id"], r["briefing_text"]) for r in routes])
+        step("synthesize_briefing")
         _backend("POST", f"/internal/plan-runs/{plan_run_id}/status", json={"status": "done"})
         return {"plan_run_id": plan_run_id, "impact": planner.impact_summary(solved), "audio": audio}
     except Exception as e:

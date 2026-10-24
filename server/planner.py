@@ -40,25 +40,35 @@ def forecast_fill(state: dict) -> dict:
     """Predict tomorrow-morning fill % per bin from its recent fill rate.
 
     Simple and explainable on purpose: rate = average rise per day over the last 7 days, ignoring
-    drops (those are collections). Swap in a weekday-aware model if you have time.
+    drops (those are collections). Weekday-aware: if tomorrow is a weekend (or weekday), use the rate
+    seen on matching days when there's at least a day of such data — hostels fill faster on weekends.
     """
     out = {}
     multiplier = config.MOVE_OUT_MULTIPLIER if state.get("move_out") else 1.0
+    weekend_tomorrow = datetime.fromisoformat(state["plan_date"]).weekday() >= 5
     for b in state["bins"]:
         readings = sorted(b.get("readings", []))
         if not readings:
-            out[str(b["id"])] = {"current": 0, "rate_per_day": 0, "predicted": 0}
+            out[str(b["id"])] = {"current": 0, "rate_per_day": 0, "predicted": 0, "basis": "no data"}
             continue
-        rises, hours = 0.0, 0.0
+        rises = {True: 0.0, False: 0.0}  # keyed by "is weekend"
+        hours = {True: 0.0, False: 0.0}
         for (t0, f0), (t1, f1) in zip(readings, readings[1:]):
             dt = (datetime.fromisoformat(t1) - datetime.fromisoformat(t0)).total_seconds() / 3600
             if f1 >= f0 and dt > 0:
-                rises += f1 - f0
-                hours += dt
-        rate = (rises / hours * 24) if hours else 0
+                wk = datetime.fromisoformat(t1).weekday() >= 5
+                rises[wk] += f1 - f0
+                hours[wk] += dt
+        if hours[weekend_tomorrow] >= 24:
+            rate = rises[weekend_tomorrow] / hours[weekend_tomorrow] * 24
+            basis = "weekend rate" if weekend_tomorrow else "weekday rate"
+        else:
+            total_h = hours[True] + hours[False]
+            rate = (rises[True] + rises[False]) / total_h * 24 if total_h else 0
+            basis = "7-day rate"
         current = readings[-1][1]
         predicted = current + rate * multiplier
-        out[str(b["id"])] = {"current": round(current, 1), "rate_per_day": round(rate, 1), "predicted": round(predicted, 1)}
+        out[str(b["id"])] = {"current": round(current, 1), "rate_per_day": round(rate, 1), "predicted": round(predicted, 1), "basis": basis}
     return out
 
 
@@ -67,8 +77,8 @@ def select_stops(state: dict, forecast: dict) -> list[dict]:
     stops: dict[int, dict] = {}
 
     def stop_for(b):
-        return stops.setdefault(b["id"], {"location_id": b["id"], "name": b["name"], "lat": b["lat"], "lng": b["lng"],
-                                          "est_kg": 0.0, "reasons": []})
+        return stops.setdefault(b["id"], {"location_id": b["id"], "name": b["name"], "name_hi": b.get("name_hi") or b["name"],
+                                          "lat": b["lat"], "lng": b["lng"], "est_kg": 0.0, "reasons": []})
 
     by_id = {b["id"]: b for b in state["bins"]}
     for b in state["bins"]:
@@ -77,7 +87,7 @@ def select_stops(state: dict, forecast: dict) -> list[dict]:
         if pred >= config.FILL_THRESHOLD:
             s = stop_for(b)
             s["est_kg"] += b["capacity_l"] * min(pred, 120) / 100 * config.KG_PER_LITRE
-            s["reasons"].append(f"forecast {pred:.0f}%")
+            s["reasons"].append(f"forecast {pred:.0f}%" if pred < 100 else "forecast: overflowing")
     for loc_id in state.get("overflow_location_ids", []):
         if loc_id in by_id:
             s = stop_for(by_id[loc_id])
@@ -186,7 +196,7 @@ def _vrp(state: dict, stops: list[dict], time_limit_s: int) -> dict:
 def briefing_text(route: dict, plan_date: str) -> str:
     """Hindi morning briefing, read out by ElevenLabs TTS. Keep sentences short — it's heard, not read."""
     stops = route["stops"]
-    names = [s["name"] for s in stops]
+    names = [s.get("name_hi") or s["name"] for s in stops]  # Devanagari so the Hindi voice pronounces them naturally
     lines = [f"नमस्ते {route['collector_name']} जी। कल के लिए आपका रूट तैयार है।",
              f"कुल {len(stops)} स्टॉप हैं, लगभग {route['distance_km']:.1f} किलोमीटर, और करीब {route['load_kg']:.0f} किलो कचरा।"]
     if route.get("trips", 1) > 1:
@@ -197,21 +207,27 @@ def briefing_text(route: dict, plan_date: str) -> str:
             lines.append("उसके बाद " + ", फिर ".join(names[1:]) + "।")
     pickups = [s for s in stops if any(r.startswith("pickup") for r in s["reasons"])]
     if pickups:
-        lines.append(f"{len(pickups)} जगह पर छात्रों ने कबाड़ उठाने के लिए बुलाया है: " + ", ".join(p["name"] for p in pickups) + "।")
+        lines.append(f"{len(pickups)} जगह पर छात्रों ने कबाड़ उठाने के लिए बुलाया है: " + ", ".join(p.get("name_hi") or p["name"] for p in pickups) + "।")
     overflow = [s for s in stops if any("overflow" in r for r in s["reasons"])]
     if overflow:
-        lines.append("ये डिब्बे भरे हुए बताए गए हैं, पहले इन्हें देखिए: " + ", ".join(o["name"] for o in overflow) + "।")
+        lines.append("ये डिब्बे भरे हुए बताए गए हैं, पहले इन्हें देखिए: " + ", ".join(o.get("name_hi") or o["name"] for o in overflow) + "।")
     lines.append("गत्ता, बोतल और पन्नी अलग-अलग रखिए। काम पूरा हो तो बोलकर बता दीजिए कितना किलो उठाया। धन्यवाद।")
     return " ".join(lines)
 
 
 # ---------------------------------------------------------------- whole pipeline (local fallback)
-def run_pipeline(state: dict) -> dict:
+PIPELINE_STEPS = ["load_state", "forecast_fill", "select_stops", "solve_routes", "publish_routes", "synthesize_briefing"]
+
+
+def run_pipeline(state: dict, on_step=lambda step: None) -> dict:
     forecast = forecast_fill(state)
+    on_step("forecast_fill")
     stops = select_stops(state, forecast)
+    on_step("select_stops")
     solved = solve_routes(state, stops)
     for r in solved["routes"]:
         r["briefing_text"] = briefing_text(r, state["plan_date"])
+    on_step("solve_routes")
     solved["forecast"] = forecast
     return solved
 

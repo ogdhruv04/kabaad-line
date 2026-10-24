@@ -13,7 +13,7 @@
   --color-leaf-soft: #dcefe2;
   --color-amber: #d99a2b;
   --color-alert: #c9482f;
-  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Hind", system-ui, sans-serif;  /* Hind covers Devanagari headings */
   --font-sans: "Hind", system-ui, sans-serif;
 }
 
@@ -21,3 +21,14 @@ html, body, #root { height: 100%; }
 body { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); }
 h1, h2, h3, .font-display { font-family: var(--font-display); letter-spacing: -0.01em; }
 .leaflet-container { font-family: var(--font-sans); border-radius: 14px; }
+
+/* Live-feed and voice animations */
+@keyframes flash-in { 0% { background: #dcefe2; transform: translateY(-6px); opacity: 0; } 30% { opacity: 1; transform: none; } 100% { background: transparent; } }
+.flash-in { animation: flash-in 2.4s ease-out; border-radius: 10px; }
+@keyframes ripple { 0% { transform: scale(0.85); opacity: 0.55; } 100% { transform: scale(1.6); opacity: 0; } }
+.ripple { animation: ripple 2.2s ease-out infinite; }
+@keyframes bar { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.wave-bar { animation: bar 1.1s ease-in-out infinite; transform-origin: center; }
+@keyframes toast-in { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.toast-in { animation: toast-in 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) { .flash-in, .ripple, .wave-bar, .toast-in { animation: none; } }

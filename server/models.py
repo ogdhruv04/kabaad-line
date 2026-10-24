@@ -82,6 +82,7 @@ class PlanRun(Base):
     workflow_run_id: Mapped[str] = mapped_column(String(80), default="")
     status: Mapped[str] = mapped_column(String(20), default="running")
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    steps: Mapped[list] = mapped_column(JSON, default=list)  # pipeline steps finished so far, in order
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

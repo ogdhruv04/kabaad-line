@@ -1,33 +1,14 @@
-import { createElement, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { get, type Collector as C, type FeedItem, type Latest } from '../api'
 import { Card, Feed, LiveBadge } from '../components/ui'
-
-const AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined
-const WIDGET_SRC = 'https://unpkg.com/@elevenlabs/convai-widget-embed'
-
-/** ElevenLabs Agents web widget. Verify the embed snippet in your agent's "Widget" tab and paste it here if it differs. */
-function VoiceWidget({ collectorName }: { collectorName: string }) {
-  useEffect(() => {
-    if (!AGENT_ID || document.querySelector(`script[src="${WIDGET_SRC}"]`)) return
-    const s = document.createElement('script')
-    s.src = WIDGET_SRC; s.async = true; s.type = 'text/javascript'
-    document.body.appendChild(s)
-  }, [])
-  if (!AGENT_ID) {
-    return <p className="rounded-xl bg-amber/10 p-3 text-sm">Set <code>VITE_ELEVENLABS_AGENT_ID</code> in <code>web/.env</code> to load the voice agent.</p>
-  }
-  return createElement('elevenlabs-convai', {
-    'agent-id': AGENT_ID,
-    'dynamic-variables': JSON.stringify({ collector_name: collectorName }),
-    key: collectorName,
-  })
-}
+import VoicePanel from '../components/VoicePanel'
 
 const TRY_SAYING = [
   'राजेंद्र भवन के पीछे वाला डस्टबिन भर गया है',
   'Cautley se 12 kilo gatta uthaya',
   'Mera kal ka route batao',
   'Main gate market pe kooda bahar gir raha hai',
+  'Raj bhawan ka dibba aadha bhara hai  (agent asks: Rajendra ya Rajiv?)',
 ]
 
 export default function Collector() {
@@ -48,7 +29,7 @@ export default function Collector() {
     <div className="grid gap-4 lg:grid-cols-5">
       <div className="grid gap-4 lg:col-span-3">
         <Card>
-          <h1 className="text-3xl font-bold">बोलिए, हम लिख लेंगे</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">बोलिए, हम लिख लेंगे</h1>
           <p className="mt-1 text-muted">Speak, we'll log it. Collectors report full bins and what they picked up, in Hindi, without reading or typing anything.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {collectors.map((c) => (
@@ -56,8 +37,8 @@ export default function Collector() {
                 className={`rounded-full px-4 py-2 text-sm font-semibold ${who === c.name ? 'bg-ink text-paper' : 'bg-line'}`}>{c.name}</button>
             ))}
           </div>
-          <div className="mt-5 flex min-h-24 items-center justify-center rounded-2xl border border-dashed border-kraft/60 bg-paper p-4">
-            <VoiceWidget collectorName={who} />
+          <div className="mt-5 rounded-2xl border border-dashed border-kraft/60 bg-paper/50 p-4">
+            <VoicePanel collectorName={who} />
           </div>
           <div className="mt-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Try saying</div>
@@ -77,7 +58,7 @@ export default function Collector() {
                 : <p className="mt-3 rounded-xl bg-amber/10 p-3 text-sm">Audio briefing appears here once ElevenLabs TTS is configured.</p>}
               <ol className="mt-3 grid gap-2">
                 {route.stops.map((s, i) => (
-                  <li key={s.location_id} className="flex gap-3 rounded-xl bg-paper px-3 py-2">
+                  <li key={`${s.location_id}-${i}`} className="flex gap-3 rounded-xl bg-paper px-3 py-2">
                     <span className="font-display text-lg font-bold text-kraft">{i + 1}</span>
                     <div><div className="font-semibold">{s.name}</div><div className="text-xs text-muted">{s.reasons.join(' · ')} · ~{s.est_kg} kg</div></div>
                   </li>

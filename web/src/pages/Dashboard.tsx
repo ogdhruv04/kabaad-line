@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { get, post, ROUTE_COLORS, type FeedItem, type Kpis, type Latest, type Loc } from '../api'
+import { get, post, ROUTE_COLORS, type FeedItem, type Kpis, type Latest, type Loc, type RunStatus } from '../api'
 import CampusMap from '../components/CampusMap'
+import { ImpactStory, PipelineSteps } from '../components/Plan'
 import { Card, Feed, LiveBadge, SimBadge, Stat } from '../components/ui'
-
-type RunStatus = { id: number; status: string; engine: string; workflow_run_id: string; summary: { error?: string } }
 
 export default function Dashboard() {
   const [locs, setLocs] = useState<Loc[]>([])
@@ -33,7 +32,7 @@ export default function Dashboard() {
 
   const plan = async () => {
     const r = await post<{ plan_run_id: number; engine: string; workflow_run_id: string }>('/api/plan/run', { move_out: moveOut })
-    setRun({ id: r.plan_run_id, status: 'running', engine: r.engine, workflow_run_id: r.workflow_run_id, summary: {} })
+    setRun(await get<RunStatus>(`/api/plan/runs/${r.plan_run_id}`))
   }
 
   const impact = latest.run?.impact
@@ -42,7 +41,7 @@ export default function Dashboard() {
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Campus waste, today</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">Campus waste, today</h1>
           <p className="text-muted">Collectors report by voice. Tomorrow's routes are planned from what they say.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -57,14 +56,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {run && (
-        <Card className="text-sm">
-          Plan run #{run.id} · <b>{run.status}</b> · engine: {run.engine === 'render_workflow' ? `Render Workflow (${run.workflow_run_id})` : 'local fallback'}
-          {run.summary?.error && <span className="text-alert"> · {run.summary.error}</span>}
-        </Card>
-      )}
+      {run && <PipelineSteps run={run} />}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {kpis && <ImpactStory kpis={kpis} impact={impact} />}
+
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <Stat label="Route km saved (tomorrow)" value={impact ? `${impact.pct_saved}%` : '—'}
           sub={impact ? `${impact.optimized_km} km vs ${impact.baseline_km} km fixed round` : 'Run “Plan tomorrow”'} />
         <Stat label={`Diverted from landfill (${kpis?.days ?? 7}d)`} value={kpis ? `${kpis.diversion_pct}%` : '—'} sub={kpis && `${kpis.recyclable_kg.toLocaleString()} kg recyclable`} badge={<SimBadge />} />
@@ -94,13 +90,13 @@ export default function Dashboard() {
 
       <Card>
         <div className="mb-2 flex items-center justify-between"><h2 className="text-lg font-bold">Collected by material, last {kpis?.days ?? 7} days</h2><SimBadge /></div>
-        <div style={{ height: 260 }}>
+        <div style={{ height: 300 }}>
           <ResponsiveContainer>
-            <BarChart data={kpis?.by_material ?? []} margin={{ left: 8 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} />
-              <YAxis tick={{ fontSize: 12 }} unit=" kg" width={70} />
-              <Tooltip formatter={(v) => `${Number(v).toFixed(0)} kg`} />
-              <Bar dataKey="kg" fill="#b9864a" radius={[6, 6, 0, 0]} />
+            <BarChart data={kpis?.by_material ?? []} layout="vertical" margin={{ left: 0, right: 16 }}>
+              <XAxis type="number" tick={{ fontSize: 12 }} unit=" kg" />
+              <YAxis type="category" dataKey="label" tick={{ fontSize: 12 }} width={118} interval={0} />
+              <Tooltip formatter={(v) => `${Number(v).toFixed(0)} kg`} cursor={{ fill: '#e3dac8', opacity: 0.4 }} />
+              <Bar dataKey="kg" fill="#b9864a" radius={[0, 6, 6, 0]} barSize={18} />
             </BarChart>
           </ResponsiveContainer>
         </div>

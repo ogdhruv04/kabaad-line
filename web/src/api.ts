@@ -30,6 +30,12 @@ export type Kpis = {
 }
 export type FeedItem = { type: 'report' | 'collection' | 'pickup'; kind: string; text: string; location: string; who: string; channel: string; simulated: boolean; ts: string }
 export type Collector = { id: number; name: string; vehicle_capacity_kg: number }
+export type RunStatus = {
+  id: number; status: string; engine: string; workflow_run_id: string
+  steps: string[]; all_steps: string[]; summary: { error?: string; impact?: Impact }
+}
+
+export const feedKey = (i: FeedItem) => `${i.type}|${i.ts}|${i.location}|${i.text}`
 
 export const ROUTE_COLORS = ['#2e7a4c', '#b9864a', '#3d6fb6', '#8a4fb0', '#c9482f']
 

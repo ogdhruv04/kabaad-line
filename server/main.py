@@ -9,6 +9,7 @@ Run locally:  uvicorn server.main:app --reload
 from __future__ import annotations
 
 import base64
+import re
 import threading
 from datetime import date, datetime, timedelta, timezone
 
@@ -174,6 +175,15 @@ def create_report(body: WebReportIn, db: Session = Depends(get_db)):
 
 
 # ======================================================================= planning
+DEVANAGARI = re.compile(r"[\u0900-\u097F]")
+
+
+def hindi_name(loc: Location) -> str:
+    """Longest Devanagari alias, e.g. "राजेंद्र भवन", so TTS says the place the way collectors do."""
+    hi = [a for a in (loc.aliases or []) if DEVANAGARI.search(a)]
+    return max(hi, key=len) if hi else loc.name
+
+
 def build_state(db: Session, plan_date: str, move_out: bool) -> dict:
     since = utcnow() - timedelta(days=7)
     locs = db.scalars(select(Location)).all()
@@ -187,7 +197,7 @@ def build_state(db: Session, plan_date: str, move_out: bool) -> dict:
         "plan_date": plan_date,
         "move_out": move_out,
         "depot": {"id": depot.id, "name": depot.name, "lat": depot.lat, "lng": depot.lng},
-        "bins": [{"id": l.id, "name": l.name, "kind": l.kind, "lat": l.lat, "lng": l.lng, "capacity_l": l.capacity_l,
+        "bins": [{"id": l.id, "name": l.name, "name_hi": hindi_name(l), "kind": l.kind, "lat": l.lat, "lng": l.lng, "capacity_l": l.capacity_l,
                   "readings": readings.get(l.id, [])} for l in locs if l.kind != "depot"],
         "overflow_location_ids": overflow_ids,
         "pickups": [{"id": p.id, "location_id": p.location_id, "material": p.material, "est_kg": p.est_kg}
@@ -221,17 +231,26 @@ def store_audio(db: Session, route_id: int, mp3: bytes) -> int:
     return clip.id
 
 
+def mark_step(db: Session, run: PlanRun, step: str) -> None:
+    run.steps = [*(run.steps or []), step]  # reassign so SQLAlchemy notices the JSON change
+    db.commit()
+
+
 def run_locally(run_id: int, move_out: bool) -> None:
     """Fallback when Render Workflows isn't configured: same pipeline, in a thread."""
     with SessionLocal() as db:
         run = db.get(PlanRun, run_id)
         try:
-            solved = planner.run_pipeline(build_state(db, run.plan_date, move_out))
+            state = build_state(db, run.plan_date, move_out)
+            mark_step(db, run, "load_state")
+            solved = planner.run_pipeline(state, on_step=lambda step: mark_step(db, run, step))
             created = store_result(db, run, solved)
+            mark_step(db, run, "publish_routes")
             for c in created:
                 mp3 = tts.synthesize(c["briefing_text"])
                 if mp3:
                     store_audio(db, c["route_id"], mp3)
+            mark_step(db, run, "synthesize_briefing")
             run.status = "done"
         except Exception as e:  # surface errors in the UI instead of hanging
             run.status = "failed"
@@ -278,7 +297,7 @@ def plan_status(run_id: int, db: Session = Depends(get_db)):
         except Exception:
             pass
     return {"id": run.id, "status": run.status, "engine": run.engine, "workflow_run_id": run.workflow_run_id,
-            "plan_date": run.plan_date, "summary": {k: v for k, v in (run.summary or {}).items() if k != "forecast"}}
+            "plan_date": run.plan_date, "steps": run.steps or [], "all_steps": planner.PIPELINE_STEPS, "summary": {k: v for k, v in (run.summary or {}).items() if k != "forecast"}}
 
 
 @app.get("/api/routes/latest")
@@ -326,6 +345,19 @@ class AudioIn(BaseModel):
 @app.post("/internal/routes/{route_id}/audio", dependencies=[Depends(require_secret)])
 def internal_audio(route_id: int, body: AudioIn, db: Session = Depends(get_db)):
     return {"audio_id": store_audio(db, route_id, base64.b64decode(body.mp3_b64))}
+
+
+class StepIn(BaseModel):
+    step: str
+
+
+@app.post("/internal/plan-runs/{run_id}/step", dependencies=[Depends(require_secret)])
+def internal_step(run_id: int, body: StepIn, db: Session = Depends(get_db)):
+    run = db.get(PlanRun, run_id)
+    if not run:
+        raise HTTPException(404)
+    mark_step(db, run, body.step)
+    return {"ok": True}
 
 
 class RunStatusIn(BaseModel):
